@@ -1,0 +1,21 @@
+mkdir src 
+mkdir public 
+npm install
+npm install electron-is-dev
+npm run dev
+npm install --save-dev @babel/core @babel/preset-env @babel/preset-react 
+mkdir src/components 
+npm install @mui/icons-material 
+npm install axios socks-proxy-agent 
+npm install --save-dev wait-on
+npm install --save-dev cross-env 
+npm install --save-dev stream-http https-browserify stream-browserify buffer url
+rm -rf node_modules
+rm -f package-lock.json
+npm install
+npm run dev
+npm install --save-dev react-app-rewired 
+npm install --save-dev @babel/plugin-proposal-private-property-in-object 
+
+# Test V2Ray SOCKS5 proxy with curl
+curl --socks5 127.0.0.1:1080 https://api.ipify.org?format=json 
