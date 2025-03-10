@@ -943,6 +943,10 @@ function createDebugPageContent(profile, realBrowserData) {
             <button class="tab" onclick="openTab('cookies')">Cookies</button>
             <button class="tab" onclick="openTab('storage')">Storage</button>
             <button class="tab" onclick="openTab('plugins')">Plugins</button>
+            <button class="tab" onclick="openTab('geolocation')">Geolocation</button>
+            <button class="tab" onclick="openTab('timezone')">Timezone</button>
+            <button class="tab" onclick="openTab('languages')">Languages</button>
+            <button class="tab" onclick="openTab('webrtc')">WebRTC</button>
             <button class="tab" onclick="openTab('advanced')">Advanced</button>
           </div>
 
@@ -1177,6 +1181,118 @@ function createDebugPageContent(profile, realBrowserData) {
                 'Checking...',
                 null
               )}
+            </div>
+          </div>
+          
+          <div id="geolocation" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Geolocation Settings</div>
+              </div>
+              ${createComparisonRow(
+                'Geolocation Status',
+                profile.settings?.geolocation ? 'Enabled' : 'Disabled',
+                realBrowserData.permissions.geolocation ? 'Available' : 'Not Available'
+              )}
+              ${createComparisonRow(
+                'Latitude',
+                getNestedValue(profile, 'proxy.geolocation.lat', 'Not set'),
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'Longitude',
+                getNestedValue(profile, 'proxy.geolocation.lon', 'Not set'),
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'City',
+                getNestedValue(profile, 'proxy.geolocation.city', 'Not set'),
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'Region',
+                getNestedValue(profile, 'proxy.geolocation.region', 'Not set'),
+                'Checking...',
+                null
+              )}
+            </div>
+          </div>
+          
+          <div id="timezone" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Timezone Settings</div>
+              </div>
+              ${createComparisonRow(
+                'Timezone',
+                getNestedValue(profile, 'proxy.timezone', 'Not set'),
+                realBrowserData.timezone.id
+              )}
+              ${createComparisonRow(
+                'Timezone Offset',
+                'UTC' + (getNestedValue(profile, 'settings.timezoneOffset', 0) > 0 ? '+' : '') + 
+                getNestedValue(profile, 'settings.timezoneOffset', '0'),
+                'UTC' + (realBrowserData.timezone.offset > 0 ? '-' : '+') + 
+                Math.abs(realBrowserData.timezone.offset/60)
+              )}
+              ${createComparisonRow(
+                'Date String',
+                'Based on timezone',
+                realBrowserData.timezone.string
+              )}
+            </div>
+          </div>
+          
+          <div id="languages" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Language Settings</div>
+              </div>
+              ${createComparisonRow(
+                'Primary Language',
+                getNestedValue(profile, 'proxy.language', 'en-US'),
+                realBrowserData.language
+              )}
+              <div class="info-row">
+                <div class="info-label">Available Languages:</div>
+                <div class="tags-container">
+                  ${Array.isArray(realBrowserData.languages) ? 
+                    realBrowserData.languages.map(lang => 
+                      `<span class="tag">${lang}</span>`
+                    ).join('') : 
+                    '<span class="tag">Not available</span>'
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div id="webrtc" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">WebRTC Settings</div>
+                <button class="test-button" onclick="testWebRTC()">Test WebRTC</button>
+              </div>
+              ${createComparisonRow(
+                'WebRTC Status',
+                profile.settings?.blockWebRTC ? 'Blocked' : 'Enabled',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'IP Leak Protection',
+                profile.settings?.webrtcIPProtection ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
+              <div class="info-row">
+                <div class="info-label">WebRTC Test Result:</div>
+                <div id="webrtc-status" class="info-value">Not tested yet</div>
+                <div id="webrtc-indicator" class="match-indicator">-</div>
+              </div>
             </div>
           </div>
 
