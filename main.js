@@ -192,7 +192,8 @@ function createWindow() {
   // Load the app
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools();  // Auto-open DevTools in dev mode
+    // Comment out or remove the next line to prevent DevTools from auto-opening
+    // mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile('./build/index.html');
   }
