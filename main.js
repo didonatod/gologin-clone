@@ -1064,7 +1064,7 @@ function createDebugPageContent(profile, realBrowserData) {
                 null
               )}
               ${createComparisonRow(
-                'IP Address',
+                'Proxy-IP',
                 profile.proxy?.ip || 'Not set',
                 'Checking...',
                 null
@@ -1709,13 +1709,20 @@ async function launchHealthPage(profile) {
     const existingInstance = browsers.get(`health_${profile.id}`);
     if (existingInstance) {
       try {
+        console.log('Closing existing browser instance for health page');
         await existingInstance.browser.close();
+        // Add a small delay to ensure the browser is fully closed
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (err) {
         console.log('Error closing existing browser:', err);
       }
       browsers.delete(`health_${profile.id}`);
     }
 
+    // Add a small delay before launching a new browser
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    console.log('Creating new browser instance for health page');
     const browser = await puppeteer.launch({
       headless: false,
       executablePath: process.platform === 'win32' 
@@ -1734,28 +1741,45 @@ async function launchHealthPage(profile) {
       ],
       ignoreDefaultArgs: ['--enable-automation'],
       defaultViewport: null
+    }).catch(error => {
+      console.error('Failed to launch browser:', error);
+      throw new Error(`Failed to launch browser: ${error.message}`);
     });
 
     // Get all pages and close them
-    const pages = await browser.pages();
-    await Promise.all(pages.map(page => page.close().catch(console.error)));
+    console.log('Closing initial pages');
+    try {
+      const pages = await browser.pages();
+      await Promise.all(pages.map(page => page.close().catch(err => console.log('Error closing page:', err))));
+    } catch (error) {
+      console.error('Error closing initial pages:', error);
+      // Continue anyway, don't throw here
+    }
 
     // Create new page with error handling
     let healthPage;
     try {
+      console.log('Creating new page for health dashboard');
       healthPage = await browser.newPage();
     } catch (error) {
       console.error('Error creating new page:', error);
-      await browser.close();
-      throw new Error('Failed to create new page');
+      await browser.close().catch(err => console.log('Error closing browser after page creation failure:', err));
+      throw new Error(`Failed to create new page: ${error.message}`);
     }
 
     // Set viewport
-    await healthPage.setViewport({ width: 1200, height: 800 });
+    try {
+      await healthPage.setViewport({ width: 1200, height: 800 });
+    } catch (error) {
+      console.error('Error setting viewport:', error);
+      await browser.close().catch(err => console.log('Error closing browser after viewport error:', err));
+      throw new Error(`Failed to set viewport: ${error.message}`);
+    }
 
     // Get browser data with error handling
     let realBrowserData;
     try {
+      console.log('Getting browser data');
       realBrowserData = await healthPage.evaluate(() => {
         return {
           userAgent: navigator.userAgent,
@@ -1818,23 +1842,26 @@ async function launchHealthPage(profile) {
           })()
         };
       });
-          } catch (error) {
+    } catch (error) {
       console.error('Error getting browser data:', error);
-      await browser.close();
-      throw new Error('Failed to get browser data');
+      await browser.close().catch(err => console.log('Error closing browser after data error:', err));
+      throw new Error(`Failed to get browser data: ${error.message}`);
     }
 
     // Set page content with error handling
     try {
+      console.log('Creating health page content');
       const healthContent = createDebugPageContent(profile, realBrowserData);
+      console.log('Setting page content');
       await healthPage.setContent(healthContent);
-      } catch (error) {
+    } catch (error) {
       console.error('Error setting page content:', error);
-      await browser.close();
-      throw new Error('Failed to set page content');
+      await browser.close().catch(err => console.log('Error closing browser after content error:', err));
+      throw new Error(`Failed to set page content: ${error.message}`);
     }
 
     // Store browser instance
+    console.log('Storing browser instance');
     browsers.set(`health_${profile.id}`, {
       browser,
       healthPage,
@@ -1843,12 +1870,14 @@ async function launchHealthPage(profile) {
 
     // Handle browser close
     browser.on('disconnected', () => {
+      console.log('Browser disconnected for health page');
       browsers.delete(`health_${profile.id}`);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('health-page-closed', profile.id);
       }
     });
 
+    console.log('Health page launched successfully');
     return { success: true };
   } catch (error) {
     console.error('Failed to launch health page:', error);
