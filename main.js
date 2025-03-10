@@ -145,7 +145,9 @@ function getBrowserArgs(profile) {
     '--ignore-certificate-errors',
     '--no-first-run',
     '--no-default-browser-check',
-    '--start-maximized'
+    '--start-maximized',
+    `--window-size=${profile.browser.resolution.width},${profile.browser.resolution.height}`,
+    `--force-device-scale-factor=1`
   ];
 
   // Add proxy if configured
@@ -298,6 +300,26 @@ const iconPath = (type) => {
 
 // Add this function before launchProfile and launchHealthPage
 function createDebugPageContent(profile, realBrowserData) {
+  // Helper function to safely get nested object values
+  const getNestedValue = (obj, path, defaultValue = 'Not set') => {
+    return path.split('.').reduce((acc, part) => acc && acc[part], obj) || defaultValue;
+  };
+
+  // Helper function to format the comparison row
+  const createComparisonRow = (label, expected, actual, customMatch = null) => {
+    const isMatch = customMatch !== null ? customMatch : expected === actual;
+    return `
+      <div class="comparison-row">
+        <div class="comparison-label">${label}</div>
+        <div class="expected-value">${expected}</div>
+        <div class="actual-value">${actual}</div>
+        <div class="match-indicator ${isMatch ? 'success' : 'error'}">
+          ${isMatch ? '✓' : '✗'}
+        </div>
+      </div>
+    `;
+  };
+
   return `
     <!DOCTYPE html>
     <html>
@@ -571,431 +593,619 @@ function createDebugPageContent(profile, realBrowserData) {
             color: #c5221f;
           }
           .verification-summary {
-            display: flex;
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: auto auto 1fr;
             gap: 20px;
-            margin-bottom: 20px;
+            margin-top: 20px;
             padding: 15px;
-            background: #f8f9fa;
+            background: white;
             border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            align-items: start;
           }
           .summary-item {
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 5px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            min-width: 120px;
           }
           .summary-number {
             font-size: 24px;
             font-weight: bold;
+            color: #1a73e8;
           }
           .summary-label {
             font-size: 12px;
             color: #5f6368;
+            text-align: center;
+          }
+          .status-description {
+            background: white;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 120px;
+            overflow-y: auto;
+            position: relative;
+          }
+          .status-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #1f1f1f;
+            margin: 0 0 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #f0f0f0;
+          }
+          .status-details {
+            font-size: 12px;
+            line-height: 1.4;
+            color: #5f6368;
+          }
+          .status-category {
+            margin-bottom: 3px;
+            padding: 2px 0;
+          }
+          .status-category.error {
+            color: #ea4335;
+          }
+          .status-category.success {
+            color: #34a853;
+          }
+          .status-category.warning {
+            color: #fbbc04;
+          }
+          .fingerprint-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+          }
+          .fingerprint-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+          }
+          .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            background: #e8f0fe;
+            color: #1a73e8;
+          }
+          .tags-container {
+            margin-top: 10px;
+          }
+          .success-rate {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 120px;
+          }
+          .gauge-container {
+            width: 120px;
+            height: 120px;
+            position: relative;
+            margin-bottom: 8px;
+          }
+          .gauge {
+            width: 100%;
+            height: 100%;
+          }
+          .gauge-background {
+            transition: stroke 0.3s ease;
+          }
+          .gauge-foreground {
+            transition: stroke-dashoffset 0.8s ease-in-out;
+          }
+          .gauge-percentage {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            transition: all 0.3s ease;
+            font-size: 28px;
+          }
+          /* Add color variations based on percentage */
+          .gauge[data-percentage="low"] .gauge-foreground {
+            stroke: #ea4335;
+          }
+          .gauge[data-percentage="low"] .gauge-percentage {
+            fill: #ea4335;
+          }
+          .gauge[data-percentage="medium"] .gauge-foreground {
+            stroke: #fbbc04;
+          }
+          .gauge[data-percentage="medium"] .gauge-percentage {
+            fill: #fbbc04;
+          }
+          .gauge[data-percentage="high"] .gauge-foreground {
+            stroke: #34a853;
+          }
+          .gauge[data-percentage="high"] .gauge-percentage {
+            fill: #34a853;
+          }
+          .grid-container {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 20px;
+            width: 100%;
+          }
+          .profile-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+          }
+          .verification-summary {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+          }
+          .verification-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+          }
+          .summary-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            min-width: 120px;
+          }
+          .status-description {
+            background: white;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+          }
+          .profile-header {
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+          }
+          .header-content {
+            display: grid;
+            grid-template-columns: auto auto auto 1fr;
+            gap: 30px;
+            align-items: center;
+          }
+          .profile-info {
+            display: grid;
+            gap: 8px;
+          }
+          .profile-label {
+            font-size: 13px;
+            color: #5f6368;
+            font-weight: 600;
+          }
+          .profile-value {
+            font-size: 14px;
+            color: #1f1f1f;
+          }
+          .verification-stats {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+          }
+          .stat-item {
+            text-align: center;
+            background: #f8f9fa;
+            padding: 10px 20px;
+            border-radius: 6px;
+            width: 140px;
+            height: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+          }
+          .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a73e8;
+            line-height: 1;
+          }
+          .stat-label {
+            font-size: 12px;
+            color: #5f6368;
+            margin-top: 4px;
+          }
+          .gauge-section {
+            width: 140px;
+            height: 140px;
+            background: #f8f9fa;
+            padding: 10px 20px;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+          }
+          .status-description {
+            background: white;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            margin-left: 20px;
           }
         </style>
       </head>
       <body>
         <div class="container">
           <h1>
-            Profile Health Information - ${profile.name}
+            Profile Health Information
             <div class="header-actions">
               <button class="test-button" onclick="runAllTests()">Run All Tests</button>
               <button class="test-button" onclick="refreshData()">Refresh Data</button>
             </div>
           </h1>
-          
+
+          <div class="profile-header">
+            <div class="header-content">
+              <div class="profile-info">
+                <div>
+                  <div class="profile-label">Profile Name</div>
+                  <div class="profile-value">${profile.name}</div>
+                </div>
+                <div>
+                  <div class="profile-label">Created</div>
+                  <div class="profile-value">${new Date(profile.createdAt || Date.now()).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div class="profile-label">Last Modified</div>
+                  <div class="profile-value">${new Date(profile.updatedAt || Date.now()).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div class="profile-label">Profile ID</div>
+                  <div class="profile-value">${profile.id}</div>
+                </div>
+              </div>
+
+              <div class="verification-stats">
+                <div class="stat-item">
+                  <div class="stat-number" id="total-matches">4</div>
+                  <div class="stat-label">Settings Match</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number" id="total-mismatches">27</div>
+                  <div class="stat-label">Settings Mismatch</div>
+                </div>
+              </div>
+
+              <div class="gauge-section">
+                <div class="gauge-container">
+                  <svg class="gauge" viewBox="0 0 120 120">
+                    <circle class="gauge-background"
+                      cx="60" cy="60" r="50"
+                      fill="none"
+                      stroke="#e6e6e6"
+                      stroke-width="12"/>
+                    <circle class="gauge-foreground"
+                      cx="60" cy="60" r="50"
+                      fill="none"
+                      stroke="#ea4335"
+                      stroke-width="12"
+                      stroke-dasharray="314.16"
+                      stroke-dashoffset="273.32"
+                      transform="rotate(-90 60 60)"/>
+                    <text class="gauge-percentage"
+                      x="60" y="60"
+                      text-anchor="middle"
+                      dominant-baseline="middle"
+                      font-size="24"
+                      font-weight="bold"
+                      fill="#ea4335">13%</text>
+                  </svg>
+                </div>
+                <div class="stat-label">Success Rate</div>
+              </div>
+
+              <div class="status-description">
+                <h3 class="status-title">Status Breakdown
+                  <span style="font-size: 11px; color: #5f6368; font-weight: normal;">Real-time verification status</span>
+                </h3>
+                <div class="status-details" id="status-details">
+                  Status: Critical (13% match rate)
+                  <div class="status-category error">Mismatched settings:</div>
+                  <div class="status-category">• Hardware Concurrency: Expected "Default", got "8"</div>
+                  <div class="status-category">• Device Memory: Expected "Default", got "undefined GB"</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="tabs">
             <button class="tab active" onclick="openTab('verification')">Settings Verification</button>
-            <button class="tab" onclick="openTab('overview')">Overview</button>
+            <button class="tab" onclick="openTab('fingerprint')">Fingerprint</button>
             <button class="tab" onclick="openTab('browser')">Browser</button>
             <button class="tab" onclick="openTab('proxy')">Proxy</button>
-            <button class="tab" onclick="openTab('geolocation')">Geolocation</button>
-            <button class="tab" onclick="openTab('fingerprint')">Fingerprint</button>
-            <button class="tab" onclick="openTab('network')">Network</button>
-            <button class="tab" onclick="openTab('media')">Media</button>
-            <button class="tab" onclick="openTab('permissions')">Permissions</button>
+            <button class="tab" onclick="openTab('cookies')">Cookies</button>
+            <button class="tab" onclick="openTab('storage')">Storage</button>
+            <button class="tab" onclick="openTab('plugins')">Plugins</button>
             <button class="tab" onclick="openTab('advanced')">Advanced</button>
           </div>
 
           <div id="verification" class="tab-content active">
-            <div class="verification-summary">
-              <div class="summary-item">
-                <div class="summary-number" id="total-matches">0</div>
-                <div class="summary-label">Settings Match</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-number" id="total-mismatches">0</div>
-                <div class="summary-label">Settings Mismatch</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-number" id="match-percentage">0%</div>
-                <div class="summary-label">Success Rate</div>
-              </div>
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">System & Browser Settings</div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">Operating System</div>
-                <div class="expected-value">${profile.os || 'Not set'}</div>
-                <div class="actual-value">${realBrowserData.platform}</div>
-                <div class="match-indicator ${realBrowserData.platform.toLowerCase().includes(profile.os.toLowerCase()) ? 'success' : 'error'}">
-                  ${realBrowserData.platform.toLowerCase().includes(profile.os.toLowerCase()) ? '✓' : '✗'}
-                </div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">User Agent</div>
-                <div class="expected-value">${profile.settings?.userAgent || 'Default'}</div>
-                <div class="actual-value">${realBrowserData.userAgent}</div>
-                <div class="match-indicator ${profile.settings?.userAgent === realBrowserData.userAgent ? 'success' : 'error'}">
-                  ${profile.settings?.userAgent === realBrowserData.userAgent ? '✓' : '✗'}
-                </div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">Screen Resolution</div>
-                <div class="expected-value">${profile.browser?.resolution?.width}x${profile.browser?.resolution?.height || 'Default'}</div>
-                <div class="actual-value">${realBrowserData.screen.width}x${realBrowserData.screen.height}</div>
-                <div class="match-indicator ${
-                  profile.browser?.resolution?.width === realBrowserData.screen.width &&
-                  profile.browser?.resolution?.height === realBrowserData.screen.height ? 'success' : 'error'
-                }">
-                  ${profile.browser?.resolution?.width === realBrowserData.screen.width &&
-                    profile.browser?.resolution?.height === realBrowserData.screen.height ? '✓' : '✗'}
-                </div>
-              </div>
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Location & Language Settings</div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">Timezone</div>
-                <div class="expected-value">${profile.settings?.timezone || 'Default'}</div>
-                <div class="actual-value">${realBrowserData.timezone.id}</div>
-                <div class="match-indicator ${profile.settings?.timezone === realBrowserData.timezone.id ? 'success' : 'error'}">
-                  ${profile.settings?.timezone === realBrowserData.timezone.id ? '✓' : '✗'}
-                </div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">Language</div>
-                <div class="expected-value">${profile.settings?.language || 'Default'}</div>
-                <div class="actual-value">${realBrowserData.language}</div>
-                <div class="match-indicator ${profile.settings?.language === realBrowserData.language ? 'success' : 'error'}">
-                  ${profile.settings?.language === realBrowserData.language ? '✓' : '✗'}
-                </div>
-              </div>
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Privacy & Security Settings</div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">WebRTC</div>
-                <div class="expected-value">${profile.settings?.blockWebRTC ? 'Blocked' : 'Enabled'}</div>
-                <div class="actual-value" id="webrtc-status">Checking...</div>
-                <div class="match-indicator" id="webrtc-indicator">-</div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">Canvas Fingerprint</div>
-                <div class="expected-value">${profile.settings?.maskFingerprint ? 'Protected' : 'Default'}</div>
-                <div class="actual-value" id="canvas-status">Checking...</div>
-                <div class="match-indicator" id="canvas-indicator">-</div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">WebGL Fingerprint</div>
-                <div class="expected-value">${profile.settings?.maskWebGL ? 'Protected' : 'Default'}</div>
-                <div class="actual-value" id="webgl-status">Checking...</div>
-                <div class="match-indicator" id="webgl-indicator">-</div>
-              </div>
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Proxy Configuration</div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">Proxy Status</div>
-                <div class="expected-value">${profile.proxy?.enabled ? 'Enabled' : 'Disabled'}</div>
-                <div class="actual-value" id="proxy-status">Checking...</div>
-                <div class="match-indicator" id="proxy-indicator">-</div>
-              </div>
-              <div class="comparison-row">
-                <div class="comparison-label">Proxy IP</div>
-                <div class="expected-value">${profile.proxy?.ip || 'Not set'}</div>
-                <div class="actual-value" id="proxy-ip">Checking...</div>
-                <div class="match-indicator" id="proxy-ip-indicator">-</div>
-              </div>
-            </div>
+            <!-- Remove the duplicate verification-summary section -->
           </div>
 
-          <div id="overview" class="tab-content">
-            <div class="section">
-              <div class="section-title">Profile Information</div>
-              <div class="info-row">
-                <div class="info-label">Name:</div>
-                <div class="info-value">${profile.name}</div>
+          <div id="fingerprint" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Hardware Settings</div>
               </div>
-              <div class="info-row">
-                <div class="info-label">Operating System:</div>
-                <div class="info-value">
-                  ${profile.os}
-                  <span class="status ${realBrowserData.platform.toLowerCase().includes(profile.os.toLowerCase()) ? 'match' : 'mismatch'}">
-                    ${realBrowserData.platform.toLowerCase().includes(profile.os.toLowerCase()) ? '✓ Match' : '✗ Mismatch'}
-                  </span>
-                </div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Created:</div>
-                <div class="info-value">${new Date(profile.createdAt || Date.now()).toLocaleString()}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Last Modified:</div>
-                <div class="info-value">${new Date(profile.updatedAt || Date.now()).toLocaleString()}</div>
-              </div>
+              ${createComparisonRow(
+                'Hardware Concurrency',
+                getNestedValue(profile, 'fingerprint.hardware.concurrency', 'Default'),
+                realBrowserData.hardwareConcurrency
+              )}
+              ${createComparisonRow(
+                'Device Memory',
+                getNestedValue(profile, 'fingerprint.hardware.memory', 'Default'),
+                realBrowserData.deviceMemory + ' GB'
+              )}
             </div>
 
-            <div class="section">
-              <div class="section-title">System Information</div>
-              <div class="info-row">
-                <div class="info-label">Platform:</div>
-                <div class="info-value">${realBrowserData.platform}</div>
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">WebGL Settings</div>
+              </div>
+              ${createComparisonRow(
+                'WebGL Vendor',
+                getNestedValue(profile, 'fingerprint.webgl.vendor', 'Default'),
+                realBrowserData.webGL?.vendor || 'Not available'
+              )}
+              ${createComparisonRow(
+                'WebGL Renderer',
+                getNestedValue(profile, 'fingerprint.webgl.renderer', 'Default'),
+                realBrowserData.webGL?.renderer || 'Not available'
+              )}
+              ${createComparisonRow(
+                'WebGL Version',
+                getNestedValue(profile, 'fingerprint.webgl.version', 'Default'),
+                realBrowserData.webGL?.version || 'Not available'
+              )}
+            </div>
+
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Font Settings</div>
               </div>
               <div class="info-row">
-                <div class="info-label">Memory:</div>
-                <div class="info-value">${realBrowserData.deviceMemory || 'Not available'} GB</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">CPU Cores:</div>
-                <div class="info-value">${realBrowserData.hardwareConcurrency}</div>
+                <div class="info-label">Configured Fonts:</div>
+                <div class="tags-container">
+                  ${(profile.fingerprint?.fonts || []).map(font => 
+                    `<span class="tag">${font}</span>`
+                  ).join('')}
+                </div>
               </div>
             </div>
           </div>
 
           <div id="browser" class="tab-content">
-            <div class="section">
-              <div class="section-title">Browser Configuration</div>
-              <div class="info-row">
-                <div class="info-label">User Agent:</div>
-                <div class="info-value">
-                  ${realBrowserData.userAgent}
-                  <span class="status ${profile.settings?.userAgent === realBrowserData.userAgent ? 'match' : 'mismatch'}">
-                    ${profile.settings?.userAgent === realBrowserData.userAgent ? '✓ Match' : '✗ Mismatch'}
-                  </span>
-                </div>
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Browser Configuration</div>
               </div>
-              <div class="info-row">
-                <div class="info-label">Vendor:</div>
-                <div class="info-value">${realBrowserData.vendor}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Languages:</div>
-                <div class="info-value">${realBrowserData.languages.join(', ')}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Do Not Track:</div>
-                <div class="info-value">${realBrowserData.doNotTrack || 'Not set'}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Cookies Enabled:</div>
-                <div class="info-value">${realBrowserData.cookieEnabled ? 'Yes' : 'No'}</div>
-              </div>
+              ${createComparisonRow(
+                'User Agent',
+                getNestedValue(profile, 'settings.userAgent', 'Default'),
+                realBrowserData.userAgent
+              )}
+              ${createComparisonRow(
+                'Language',
+                getNestedValue(profile, 'settings.language', 'Default'),
+                realBrowserData.language
+              )}
+              ${createComparisonRow(
+                'Platform',
+                profile.os || 'Default',
+                realBrowserData.platform
+              )}
+              ${createComparisonRow(
+                'Vendor',
+                getNestedValue(profile, 'settings.vendor', 'Default'),
+                realBrowserData.vendor
+              )}
             </div>
 
-            <div class="section">
-              <div class="section-title">Display Settings</div>
-              <div class="info-row">
-                <div class="info-label">Resolution:</div>
-                <div class="info-value">${realBrowserData.screen.width}x${realBrowserData.screen.height}</div>
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Display Settings</div>
               </div>
-              <div class="info-row">
-                <div class="info-label">Available Area:</div>
-                <div class="info-value">${realBrowserData.screen.availWidth}x${realBrowserData.screen.availHeight}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Color Depth:</div>
-                <div class="info-value">${realBrowserData.screen.colorDepth} bits</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Pixel Depth:</div>
-                <div class="info-value">${realBrowserData.screen.pixelDepth} bits</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Orientation:</div>
-                <div class="info-value">${realBrowserData.screen.orientation || 'Not available'}</div>
-              </div>
+              ${createComparisonRow(
+                'Screen Resolution',
+                `${getNestedValue(profile, 'browser.resolution.width', '1920')}x${getNestedValue(profile, 'browser.resolution.height', '1080')}`,
+                `${realBrowserData.screen.width}x${realBrowserData.screen.height}`
+              )}
+              ${createComparisonRow(
+                'Color Depth',
+                getNestedValue(profile, 'browser.resolution.colorDepth', '24'),
+                realBrowserData.screen.colorDepth
+              )}
+              ${createComparisonRow(
+                'Pixel Depth',
+                getNestedValue(profile, 'browser.resolution.pixelDepth', '24'),
+                realBrowserData.screen.pixelDepth
+              )}
             </div>
           </div>
 
           <div id="proxy" class="tab-content">
-            <div class="section">
-              <div class="section-title">
-                Proxy Configuration
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Proxy Configuration</div>
                 <button class="test-button" onclick="testProxy()">Test Connection</button>
               </div>
-              <div class="info-row">
-                <div class="info-label">Status:</div>
-                <div class="info-value">
-                  ${profile.proxy?.enabled ? 'Enabled' : 'Disabled'}
-                  <span class="badge">${profile.proxy?.type || 'None'}</span>
-                </div>
+              ${createComparisonRow(
+                'Proxy Status',
+                profile.proxy?.enabled ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'IP Address',
+                profile.proxy?.ip || 'Not set',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'Port',
+                profile.proxy?.port || 'Not set',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'Type',
+                profile.proxy?.type || 'Not set',
+                'Checking...',
+                null
+              )}
+            </div>
+
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Proxy Rotation</div>
               </div>
-              <div class="info-row">
-                <div class="info-label">IP Address:</div>
-                <div class="info-value">${profile.proxy?.ip || 'Not set'}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Port:</div>
-                <div class="info-value">${profile.proxy?.port || 'Not set'}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Username:</div>
-                <div class="info-value">${profile.proxy?.username ? '********' : 'Not set'}</div>
-              </div>
-              <div id="proxy-test-result"></div>
+              ${createComparisonRow(
+                'Rotation Status',
+                getNestedValue(profile, 'proxy.rotation.enabled', false) ? 'Enabled' : 'Disabled',
+                'N/A',
+                true
+              )}
+              ${createComparisonRow(
+                'Rotation Interval',
+                getNestedValue(profile, 'proxy.rotation.interval', 'Not set'),
+                'N/A',
+                true
+              )}
             </div>
           </div>
 
-          <div id="geolocation" class="tab-content">
-            <div class="section">
-              <div class="section-title">Timezone Settings</div>
-              <div class="info-row">
-                <div class="info-label">Timezone:</div>
-                <div class="info-value">
-                  ${realBrowserData.timezone.id}
-                  <span class="status ${profile.settings?.timezone === realBrowserData.timezone.id ? 'match' : 'mismatch'}">
-                    ${profile.settings?.timezone === realBrowserData.timezone.id ? '✓ Match' : '✗ Mismatch'}
-                  </span>
-                </div>
+          <div id="cookies" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Cookie Settings</div>
               </div>
-              <div class="info-row">
-                <div class="info-label">Offset:</div>
-                <div class="info-value">UTC${realBrowserData.timezone.offset > 0 ? '-' : '+'}${Math.abs(realBrowserData.timezone.offset/60)}</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Date String:</div>
-                <div class="info-value">${realBrowserData.timezone.string}</div>
-              </div>
+              ${createComparisonRow(
+                'Cookies Enabled',
+                profile.settings?.cookies ? 'Enabled' : 'Disabled',
+                realBrowserData.cookieEnabled ? 'Enabled' : 'Disabled'
+              )}
+              ${createComparisonRow(
+                'Clear on Exit',
+                getNestedValue(profile, 'settings.clearCookiesOnExit', false) ? 'Yes' : 'No',
+                'N/A',
+                true
+              )}
+              ${createComparisonRow(
+                'Cookie Policy',
+                getNestedValue(profile, 'settings.cookiePolicy', 'Default'),
+                'N/A',
+                true
+              )}
             </div>
           </div>
 
-          <div id="fingerprint" class="tab-content">
-            <div class="grid-container">
-              <div class="section">
-                <div class="section-title">
-                  WebGL Information
-                  <button class="test-button" onclick="testWebGLFingerprint()">Test WebGL</button>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">Vendor:</div>
-                  <div class="info-value">${realBrowserData.webGL?.vendor || 'Not available'}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">Renderer:</div>
-                  <div class="info-value">${realBrowserData.webGL?.renderer || 'Not available'}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">Version:</div>
-                  <div class="info-value">${realBrowserData.webGL?.version || 'Not available'}</div>
-                </div>
-                <div id="webgl-test-result"></div>
+          <div id="storage" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Storage Settings</div>
               </div>
-
-              <div class="section">
-                <div class="section-title">
-                  Canvas Fingerprint
-                  <button class="test-button" onclick="testCanvasFingerprint()">Test Canvas</button>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">Protection:</div>
-                  <div class="info-value">
-                    ${profile.settings?.maskFingerprint ? 'Enabled' : 'Disabled'}
-                    <span class="badge">${profile.settings?.maskFingerprint ? 'Protected' : 'Default'}</span>
-                  </div>
-                </div>
-                <div id="canvas-test-result"></div>
-              </div>
+              ${createComparisonRow(
+                'Local Storage',
+                profile.settings?.localStorage ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'Session Storage',
+                profile.settings?.sessionStorage ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'IndexedDB',
+                profile.settings?.indexedDB ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
             </div>
           </div>
 
-          <div id="network" class="tab-content">
-            <div class="grid-container">
-              <div class="section">
-                <div class="section-title">
-                  WebRTC Settings
-                  <button class="test-button" onclick="testWebRTC()">Test WebRTC</button>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">WebRTC:</div>
-                  <div class="info-value">
-                    ${profile.settings?.blockWebRTC ? 'Blocked' : 'Enabled'}
-                    <span class="badge">${profile.settings?.blockWebRTC ? 'Protected' : 'Default'}</span>
-                  </div>
-                </div>
-                <div id="webrtc-test-result"></div>
+          <div id="plugins" class="tab-content">
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Plugin Settings</div>
               </div>
-
-              <div class="section">
-                <div class="section-title">Connection Information</div>
-                <div class="info-row">
-                  <div class="info-label">Type:</div>
-                  <div class="info-value">${realBrowserData.connection?.effectiveType || 'Not available'}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">Downlink:</div>
-                  <div class="info-value">${realBrowserData.connection?.downlink ? realBrowserData.connection.downlink + ' Mbps' : 'Not available'}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">RTT:</div>
-                  <div class="info-value">${realBrowserData.connection?.rtt ? realBrowserData.connection.rtt + ' ms' : 'Not available'}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div id="media" class="tab-content">
-            <div class="section">
-              <div class="section-title">Media Capabilities</div>
-              <div class="info-row">
-                <div class="info-label">Media Devices:</div>
-                <div class="info-value">
-                  ${realBrowserData.mediaDevices ? 'Available' : 'Not available'}
-                  ${realBrowserData.mediaDevices?.getUserMedia ? '<span class="badge">getUserMedia</span>' : ''}
-                  ${realBrowserData.mediaDevices?.getDisplayMedia ? '<span class="badge">getDisplayMedia</span>' : ''}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div id="permissions" class="tab-content">
-            <div class="section">
-              <div class="section-title">Browser Permissions</div>
-              ${Object.entries(realBrowserData.permissions).map(([key, value]) => `
-                <div class="info-row">
-                  <div class="info-label">${key}:</div>
-                  <div class="info-value">
-                    ${value ? 'Available' : 'Not available'}
-                    ${value ? '<span class="badge">Supported</span>' : ''}
-                  </div>
-                </div>
-              `).join('')}
+              ${createComparisonRow(
+                'Flash',
+                profile.settings?.flash ? 'Enabled' : 'Disabled',
+                'Not Available',
+                null
+              )}
+              ${createComparisonRow(
+                'Java',
+                profile.settings?.java ? 'Enabled' : 'Disabled',
+                'Not Available',
+                null
+              )}
+              ${createComparisonRow(
+                'PDF Viewer',
+                profile.settings?.pdfViewer ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
             </div>
           </div>
 
           <div id="advanced" class="tab-content">
-            <div class="section">
-              <div class="section-title">Advanced Settings</div>
-              <div class="info-row">
-                <div class="info-label">Profile ID:</div>
-                <div class="info-value">${profile.id}</div>
+            <div class="comparison-card">
+              <div class="comparison-header">
+                <div class="comparison-title">Advanced Settings</div>
               </div>
-              <div class="info-row">
-                <div class="info-label">Start URL:</div>
-                <div class="info-value">${profile.startUrl || 'Default'}</div>
-              </div>
+              ${createComparisonRow(
+                'Hardware Acceleration',
+                profile.settings?.hardwareAcceleration ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'WebGL',
+                profile.settings?.webgl ? 'Enabled' : 'Disabled',
+                realBrowserData.webGL ? 'Enabled' : 'Disabled'
+              )}
+              ${createComparisonRow(
+                'WebRTC',
+                profile.settings?.webrtc ? 'Enabled' : 'Disabled',
+                'Checking...',
+                null
+              )}
+              ${createComparisonRow(
+                'Geolocation',
+                profile.settings?.geolocation ? 'Enabled' : 'Disabled',
+                realBrowserData.permissions.geolocation ? 'Available' : 'Not Available'
+              )}
             </div>
           </div>
         </div>
@@ -1019,11 +1229,76 @@ function createDebugPageContent(profile, realBrowserData) {
             const matches = document.querySelectorAll('.match-indicator.success').length;
             const mismatches = document.querySelectorAll('.match-indicator.error').length;
             const total = matches + mismatches;
+            const percentage = total > 0 ? Math.round((matches / total) * 100) : 0;
             
             document.getElementById('total-matches').textContent = matches;
             document.getElementById('total-mismatches').textContent = mismatches;
-            document.getElementById('match-percentage').textContent = 
-              total > 0 ? Math.round((matches / total) * 100) + '%' : '0%';
+            
+            // Update gauge
+            const gauge = document.querySelector('.gauge');
+            const foreground = gauge.querySelector('.gauge-foreground');
+            const percentageText = gauge.querySelector('.gauge-percentage');
+            
+            // Calculate stroke-dashoffset
+            const circumference = 314.16;
+            const offset = circumference - (percentage / 100 * circumference);
+            
+            // Update gauge color and status description based on percentage
+            let statusColor, statusDescription;
+            if (percentage < 40) {
+              gauge.setAttribute('data-percentage', 'low');
+              statusColor = '#ea4335';
+              statusDescription = 'Critical';
+            } else if (percentage < 70) {
+              gauge.setAttribute('data-percentage', 'medium');
+              statusColor = '#fbbc04';
+              statusDescription = 'Warning';
+      } else {
+              gauge.setAttribute('data-percentage', 'high');
+              statusColor = '#34a853';
+              statusDescription = 'Good';
+            }
+            
+            // Animate the gauge
+            foreground.style.strokeDashoffset = offset;
+            percentageText.textContent = percentage + '%';
+
+            // Get all mismatched settings
+            const mismatchedRows = document.querySelectorAll('.match-indicator.error');
+            const mismatchedSettings = Array.from(mismatchedRows).map(row => {
+              const label = row.parentElement.querySelector('.comparison-label').textContent;
+              const expected = row.parentElement.querySelector('.expected-value').textContent;
+              const actual = row.parentElement.querySelector('.actual-value').textContent;
+              return { label, expected, actual };
+            });
+
+            // Create detailed status description
+            const statusDetails = document.getElementById('status-details');
+            if (total === 0) {
+              statusDetails.innerHTML = 'No settings have been verified yet.';
+            } else if (mismatches === 0) {
+              statusDetails.innerHTML = 
+                '<div class="status-category success">' +
+                '\u2713 All ' + matches + ' settings are correctly configured' +
+                '</div>';
+            } else {
+              let html = 
+                '<div class="status-category ' + statusDescription.toLowerCase() + '">' +
+                'Status: ' + statusDescription + ' (' + percentage + '% match rate)' +
+                '</div>';
+
+              if (mismatchedSettings.length > 0) {
+                html += '<div class="status-category error">Mismatched settings:</div>';
+                mismatchedSettings.forEach(setting => {
+                  html += 
+                    '<div class="status-category">' +
+                    '\u2022 ' + setting.label + ': Expected "' + setting.expected + '", got "' + setting.actual + '"' +
+                    '</div>';
+                });
+              }
+
+              statusDetails.innerHTML = html;
+            }
           }
 
           async function testWebGLFingerprint() {
@@ -1051,11 +1326,11 @@ function createDebugPageContent(profile, realBrowserData) {
               if (profileData.settings?.maskWebGL) {
                 indicatorEl.textContent = '✓';
                 indicatorEl.className = 'match-indicator success';
-    } else {
+              } else {
                 indicatorEl.textContent = '✗';
                 indicatorEl.className = 'match-indicator error';
-    }
-  } else {
+              }
+            } else {
               statusEl.textContent = 'Not Protected';
               if (profileData.settings?.maskWebGL) {
                 indicatorEl.textContent = '✗';
@@ -1090,11 +1365,11 @@ function createDebugPageContent(profile, realBrowserData) {
               if (profileData.settings?.maskFingerprint) {
                 indicatorEl.textContent = '✓';
                 indicatorEl.className = 'match-indicator success';
-              } else {
+    } else {
                 indicatorEl.textContent = '✗';
                 indicatorEl.className = 'match-indicator error';
-              }
-            } else {
+    }
+  } else {
               statusEl.textContent = 'Not Protected';
               if (profileData.settings?.maskFingerprint) {
                 indicatorEl.textContent = '✗';
@@ -1154,7 +1429,7 @@ function createDebugPageContent(profile, realBrowserData) {
               if (profileData.proxy?.enabled) {
                 statusIndicator.textContent = '✓';
                 statusIndicator.className = 'match-indicator success';
-  } else {
+              } else {
                 statusIndicator.textContent = '✗';
                 statusIndicator.className = 'match-indicator error';
               }
@@ -1256,7 +1531,7 @@ function createDebugPageContent(profile, realBrowserData) {
                 },
                 mediaDevices: (() => {
                   if (!navigator.mediaDevices) return null;
-                  return {
+  return {
                     enumerateDevices: 'enumerateDevices' in navigator.mediaDevices,
                     getUserMedia: 'getUserMedia' in navigator.mediaDevices,
                     getDisplayMedia: 'getDisplayMedia' in navigator.mediaDevices
@@ -1294,7 +1569,7 @@ function createDebugPageContent(profile, realBrowserData) {
                 if (value === expected) {
                   status.textContent = '✓ Match';
                   status.className = 'status match';
-                } else {
+  } else {
                   status.textContent = '✗ Mismatch';
                   status.className = 'status mismatch';
                 }
@@ -1303,10 +1578,120 @@ function createDebugPageContent(profile, realBrowserData) {
               resultDiv.textContent = '✓ Data refreshed successfully';
               resultDiv.className = 'test-result success';
               setTimeout(() => resultDiv.remove(), 3000);
-            } catch (error) {
+    } catch (error) {
               resultDiv.textContent = '✗ Error refreshing data: ' + error.message;
               resultDiv.className = 'test-result error';
               setTimeout(() => resultDiv.remove(), 5000);
+            }
+          }
+
+          // Add function to check storage availability
+          async function checkStorageAvailability() {
+            try {
+              // Test localStorage
+              const lsAvailable = (() => {
+                try {
+                  localStorage.setItem('test', 'test');
+                  localStorage.removeItem('test');
+                  return true;
+                } catch (e) {
+                  return false;
+                }
+              })();
+
+              // Test sessionStorage
+              const ssAvailable = (() => {
+                try {
+                  sessionStorage.setItem('test', 'test');
+                  sessionStorage.removeItem('test');
+                  return true;
+                } catch (e) {
+                  return false;
+                }
+              })();
+
+              // Test IndexedDB
+              const idbAvailable = 'indexedDB' in window;
+
+              // Update storage status indicators
+              document.querySelectorAll('.info-value').forEach(el => {
+                const label = el.previousElementSibling?.textContent?.trim().toLowerCase() || '';
+                if (label.includes('local storage')) {
+                  el.textContent = lsAvailable ? 'Enabled' : 'Disabled';
+                } else if (label.includes('session storage')) {
+                  el.textContent = ssAvailable ? 'Enabled' : 'Disabled';
+                } else if (label.includes('indexeddb')) {
+                  el.textContent = idbAvailable ? 'Enabled' : 'Disabled';
+                }
+              });
+            } catch (error) {
+              console.error('Error checking storage availability:', error);
+            }
+          }
+
+          // Add function to check plugin availability
+          async function checkPluginAvailability() {
+            try {
+              const pdfViewerAvailable = navigator.pdfViewerEnabled || false;
+              document.querySelectorAll('.info-value').forEach(el => {
+                const label = el.previousElementSibling?.textContent?.trim().toLowerCase() || '';
+                if (label.includes('pdf viewer')) {
+                  el.textContent = pdfViewerAvailable ? 'Enabled' : 'Disabled';
+                }
+              });
+            } catch (error) {
+              console.error('Error checking plugin availability:', error);
+            }
+          }
+
+          // Add function to check hardware acceleration
+          async function checkHardwareAcceleration() {
+            try {
+              const canvas = document.createElement('canvas');
+              const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+              const hardwareAccelerated = gl && gl.getParameter(gl.VENDOR) !== 'Brian Paul';
+              
+              document.querySelectorAll('.info-value').forEach(el => {
+                const label = el.previousElementSibling?.textContent?.trim().toLowerCase() || '';
+                if (label.includes('hardware acceleration')) {
+                  el.textContent = hardwareAccelerated ? 'Enabled' : 'Disabled';
+                }
+              });
+    } catch (error) {
+              console.error('Error checking hardware acceleration:', error);
+            }
+          }
+
+          // Run additional checks when page loads
+          window.addEventListener('load', () => {
+            checkStorageAvailability();
+            checkPluginAvailability();
+            checkHardwareAcceleration();
+          });
+
+          // Add resize functionality for status description
+          const statusDescription = document.querySelector('.status-description');
+          const statusSlider = document.querySelector('.status-slider');
+          let isResizing = false;
+          let startY;
+          let startHeight;
+
+          statusSlider.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = parseInt(getComputedStyle(statusDescription).height);
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', () => {
+              isResizing = false;
+              document.removeEventListener('mousemove', handleMouseMove);
+            });
+          });
+
+          function handleMouseMove(e) {
+            if (!isResizing) return;
+            const newHeight = startHeight + (e.clientY - startY);
+            if (newHeight > 50 && newHeight < 400) {
+              statusDescription.style.height = newHeight + 'px';
             }
           }
         </script>
@@ -1480,13 +1865,43 @@ async function launchProfile(profile) {
 
     console.log('Launching profile with settings:', profile);
 
-    // Enhanced browser arguments
+    // Get screen resolution from profile
+    const screenWidth = profile.browser?.resolution?.width || 1920;
+    const screenHeight = profile.browser?.resolution?.height || 1080;
+
+    // Enhanced browser arguments with proper screen resolution
     const args = [
-      ...getBrowserArgs(profile),
-      `--lang=${profile.settings?.language || 'en-US'}`,
-      `--timezone=${profile.settings?.timezone || 'UTC'}`,
-      profile.settings?.blockWebRTC ? '--disable-webrtc' : '',
-    ].filter(Boolean);
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-infobars',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--ignore-certificate-errors',
+      '--no-first-run',
+      '--no-default-browser-check',
+      // Force window size
+      `--window-size=${screenWidth},${screenHeight}`,
+      // Force screen size
+      `--screen-size=${screenWidth}x${screenHeight}`,
+      // Force window position
+      '--window-position=0,0',
+      // Disable DPI scaling
+      '--force-device-scale-factor=1',
+      // Additional screen size enforcement
+      `--ash-host-window-bounds=${screenWidth}x${screenHeight}`,
+      // Force exact dimensions
+      `--screen-width=${screenWidth}`,
+      `--screen-height=${screenHeight}`,
+    ];
+
+    // Add proxy if configured
+    if (profile.proxy && profile.proxy.enabled) {
+      const { type, ip, port, username, password } = profile.proxy;
+      const proxyServer = username && password
+        ? `${type}://${username}:${password}@${ip}:${port}`
+        : `${type}://${ip}:${port}`;
+      args.push(`--proxy-server=${proxyServer}`);
+    }
 
     const launchOptions = {
       headless: false,
@@ -1495,7 +1910,11 @@ async function launchProfile(profile) {
         : '/usr/bin/google-chrome',
       args,
       ignoreDefaultArgs: ['--enable-automation'],
-      defaultViewport: null
+      defaultViewport: {
+        width: screenWidth,
+        height: screenHeight,
+        deviceScaleFactor: 1
+      }
     };
 
     console.log('Launch options:', launchOptions);
@@ -1509,7 +1928,117 @@ async function launchProfile(profile) {
     
     // Create main page
     const page = await browser.newPage();
+    
+    // Set viewport with exact dimensions
+    await page.setViewport({
+      width: screenWidth,
+      height: screenHeight,
+      deviceScaleFactor: 1,
+      isMobile: false
+    });
+
+    // Create CDP session
     const client = await page.target().createCDPSession();
+    console.log('CDP session created');
+
+    // Set device metrics using CDP
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: screenWidth,
+      height: screenHeight,
+      deviceScaleFactor: 1,
+      mobile: false,
+      screenWidth: screenWidth,
+      screenHeight: screenHeight,
+      positionX: 0,
+      positionY: 0
+    });
+    console.log('Device metrics set:', { width: screenWidth, height: screenHeight });
+
+    // Force window bounds using CDP
+    await client.send('Browser.setWindowBounds', {
+      windowId: 1,
+      bounds: {
+        left: 0,
+        top: 0,
+        width: screenWidth,
+        height: screenHeight
+      }
+    });
+
+    // Inject comprehensive screen resolution override script
+    await page.evaluateOnNewDocument(`
+      // Override screen properties
+      const screenWidth = ${screenWidth};
+      const screenHeight = ${screenHeight};
+
+      // Screen property overrides with getters
+      Object.defineProperties(screen, {
+        width: { get: () => ${screenWidth}, configurable: true },
+        height: { get: () => ${screenHeight}, configurable: true },
+        availWidth: { get: () => ${screenWidth}, configurable: true },
+        availHeight: { get: () => ${screenHeight}, configurable: true },
+        availLeft: { get: () => 0, configurable: true },
+        availTop: { get: () => 0, configurable: true },
+        colorDepth: { get: () => 24, configurable: true },
+        pixelDepth: { get: () => 24, configurable: true }
+      });
+
+      // Window size overrides
+      Object.defineProperties(window, {
+        innerWidth: { get: () => ${screenWidth}, configurable: true },
+        innerHeight: { get: () => ${screenHeight}, configurable: true },
+        outerWidth: { get: () => ${screenWidth}, configurable: true },
+        outerHeight: { get: () => ${screenHeight}, configurable: true }
+      });
+
+      // Override devicePixelRatio
+      Object.defineProperty(window, 'devicePixelRatio', {
+        get: () => 1,
+        configurable: true
+      });
+
+      // Override matchMedia
+      window.matchMedia = function(query) {
+          return {
+          matches: query.includes('${screenWidth}') || query.includes('${screenHeight}'),
+          media: query,
+          onchange: null,
+          addListener: function() {},
+          removeListener: function() {},
+          addEventListener: function() {},
+          removeEventListener: function() {},
+          dispatchEvent: function() { return true; }
+        };
+      };
+
+      // Override window resize methods
+      window.resizeTo = function() { return; };
+      window.resizeBy = function() { return; };
+
+      // Override getScreenDetails if available
+      if ('getScreenDetails' in window) {
+        window.getScreenDetails = async function() {
+          return {
+            screens: [{
+              availWidth: ${screenWidth},
+              availHeight: ${screenHeight},
+              width: ${screenWidth},
+              height: ${screenHeight},
+              colorDepth: 24,
+              pixelDepth: 24
+            }]
+          };
+        };
+      }
+
+      // Log the overridden values
+      console.log('Screen properties overridden:', {
+        width: screen.width,
+        height: screen.height,
+        availWidth: screen.availWidth,
+        availHeight: screen.availHeight
+      });
+    `);
 
     // Navigate main page to target URL
     const targetUrl = profile.startUrl || 'https://google.com';
@@ -1873,3 +2402,54 @@ ipcMain.handle('silent-test-proxy', async (event, proxy) => {
     };
   }
 });
+
+function createProfile(profileData) {
+    // Ensure browser resolution is set
+    if (!profileData.browser) {
+        profileData.browser = {};
+    }
+    
+    if (!profileData.browser.resolution) {
+        profileData.browser.resolution = {
+            width: 1920,
+            height: 1080,
+            colorDepth: 24
+        };
+    }
+
+    // Create profile with resolution settings
+    const profile = {
+        ...profileData,
+        browser: {
+            ...profileData.browser,
+            resolution: {
+                width: parseInt(profileData.browser.resolution.width) || 1920,
+                height: parseInt(profileData.browser.resolution.height) || 1080,
+                colorDepth: parseInt(profileData.browser.resolution.colorDepth) || 24
+            }
+        }
+    };
+
+    return profile;
+}
+
+// Add function to update profile resolution
+async function updateProfileResolution(profileId, resolution) {
+    try {
+        const profile = await getProfile(profileId);
+        if (!profile) throw new Error('Profile not found');
+
+        profile.browser = profile.browser || {};
+        profile.browser.resolution = {
+            width: parseInt(resolution.width) || 1920,
+            height: parseInt(resolution.height) || 1080,
+            colorDepth: parseInt(resolution.colorDepth) || 24
+        };
+
+        await saveProfile(profile);
+        return profile;
+    } catch (error) {
+        console.error('Error updating profile resolution:', error);
+        throw error;
+    }
+}

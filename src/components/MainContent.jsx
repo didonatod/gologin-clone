@@ -1117,8 +1117,8 @@ export default function MainContent({
                       }} 
                     />
                     <Typography variant="body2" sx={{ color: '#666' }}>
-                      {selectedProfile.proxy.ip}:{selectedProfile.proxy.port}
-                    </Typography>
+                    {selectedProfile.proxy.ip}:{selectedProfile.proxy.port}
+                  </Typography>
                   </Box>
                   <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 0.5 }}>
                     Type: {selectedProfile.proxy.type || 'HTTP'}
@@ -1208,7 +1208,7 @@ export default function MainContent({
                 </Grid>
               </Box>
             </Box>
-
+            
             {/* Storage Information */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, display: 'flex', alignItems: 'center', color: '#444' }}>
@@ -1222,7 +1222,7 @@ export default function MainContent({
                     <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>Cache</Typography>
                     <Typography variant="body2">
                       {selectedProfile.storage?.cache ? 'Enabled' : 'Disabled'}
-                    </Typography>
+                  </Typography>
                   </Grid>
                   <Grid item xs={6}>
                     <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>Cookies</Typography>
@@ -1245,7 +1245,7 @@ export default function MainContent({
                 </Grid>
               </Box>
             </Box>
-
+            
             {/* Hardware Information */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, display: 'flex', alignItems: 'center', color: '#444' }}>

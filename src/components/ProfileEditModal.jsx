@@ -725,8 +725,8 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   }
                   
                   // Update the proxy data
-                  setProfileData(prev => ({
-                    ...prev,
+    setProfileData(prev => ({
+      ...prev,
                     proxy: {
                       ...prev.proxy,
                       enabled: true,
@@ -742,8 +742,8 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                       timezone,
                       lat,
                       lon
-                    }
-                  }));
+      }
+    }));
                   
                   break; // Use first valid proxy
                 }
@@ -870,41 +870,41 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
 
   // Render Overview tab
   const renderOverviewTab = () => {
-    return (
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            label="Profile Name"
-            value={profileData.name}
-            onChange={(e) => handleChange('name', e.target.value)}
-            required
+  return (
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Profile Name"
+                value={profileData.name}
+                onChange={(e) => handleChange('name', e.target.value)}
+                required
             margin="normal"
-          />
+              />
           
           <FormControl fullWidth margin="normal">
-            <InputLabel>Operating System</InputLabel>
-            <Select
-              value={profileData.os}
-              onChange={(e) => handleChange('os', e.target.value)}
+                <InputLabel>Operating System</InputLabel>
+                <Select
+                  value={profileData.os}
+                  onChange={(e) => handleChange('os', e.target.value)}
               label="Operating System"
-            >
-              <MenuItem value="Windows 10">Windows 10</MenuItem>
-              <MenuItem value="Windows 11">Windows 11</MenuItem>
-              <MenuItem value="macOS">macOS</MenuItem>
-              <MenuItem value="Linux">Linux</MenuItem>
-            </Select>
-          </FormControl>
+                >
+                  <MenuItem value="Windows 10">Windows 10</MenuItem>
+                  <MenuItem value="Windows 11">Windows 11</MenuItem>
+                  <MenuItem value="macOS">macOS</MenuItem>
+                  <MenuItem value="Linux">Linux</MenuItem>
+                </Select>
+              </FormControl>
           
-          <TextField
-            fullWidth
-            label="Startup URL"
+              <TextField
+                fullWidth
+                label="Startup URL"
             value={profileData.startupUrl}
-            onChange={(e) => handleChange('startupUrl', e.target.value)}
-            placeholder="https://example.com"
+                onChange={(e) => handleChange('startupUrl', e.target.value)}
+                placeholder="https://example.com"
             margin="normal"
-          />
-        </Grid>
+              />
+            </Grid>
         
         <Grid item xs={12} md={6}>
           <Box sx={{ 
@@ -946,8 +946,8 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
               Click the refresh icon to generate a random fingerprint
             </Typography>
           </Box>
-        </Grid>
-      </Grid>
+            </Grid>
+          </Grid>
     );
   };
 
@@ -978,44 +978,44 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
             border: '1px solid rgba(0, 0, 0, 0.08)'
           }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={6}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Proxy Type</InputLabel>
-                  <Select
+                <InputLabel>Proxy Type</InputLabel>
+                <Select
                     value={profileData.proxy.type}
                     onChange={(e) => handleChange('proxy', 'type', e.target.value)}
-                    label="Proxy Type"
-                  >
-                    <MenuItem value="http">HTTP</MenuItem>
+                  label="Proxy Type"
+                >
+                  <MenuItem value="http">HTTP</MenuItem>
                     <MenuItem value="https">HTTPS</MenuItem>
                     <MenuItem value="socks4">SOCKS4</MenuItem>
-                    <MenuItem value="socks5">SOCKS5</MenuItem>
-                    <MenuItem value="ssh">SSH</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
+                  <MenuItem value="socks5">SOCKS5</MenuItem>
+                  <MenuItem value="ssh">SSH</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
               
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
                   label="IP Address"
                   value={profileData.proxy.ip}
                   onChange={(e) => handleChange('proxy', 'ip', e.target.value)}
                   size="small"
                   placeholder="e.g., 192.168.1.1"
-                />
-              </Grid>
+              />
+            </Grid>
               
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Port"
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Port"
                   value={profileData.proxy.port}
                   onChange={(e) => handleChange('proxy', 'port', e.target.value)}
                   size="small"
                   placeholder="e.g., 8080"
-                />
-              </Grid>
+              />
+            </Grid>
               
               <Grid item xs={12} md={6}>
                 <FormControlLabel
@@ -1032,9 +1032,9 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                 />
               </Grid>
               
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
                   label="Username"
                   value={profileData.proxy.username || ''}
                   onChange={(e) => handleChange('proxy', 'username', e.target.value)}
@@ -1045,14 +1045,14 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                     opacity: profileData.proxy.auth !== 'userpass' ? 0.7 : 1,
                     transition: 'opacity 0.2s'
                   }}
-                />
-              </Grid>
+              />
+            </Grid>
               
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
                   label="Password"
-                  type="password"
+                type="password"
                   value={profileData.proxy.password || ''}
                   onChange={(e) => handleChange('proxy', 'password', e.target.value)}
                   size="small"
@@ -1062,12 +1062,12 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                     opacity: profileData.proxy.auth !== 'userpass' ? 0.7 : 1,
                     transition: 'opacity 0.2s'
                   }}
-                />
-              </Grid>
+              />
+            </Grid>
               
               <Grid item xs={12}>
                 <Divider sx={{ my: 1 }} />
-              </Grid>
+          </Grid>
               
               <Grid item xs={12}>
                 <Typography variant="subtitle2" gutterBottom>
@@ -1075,7 +1075,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                 </Typography>
               </Grid>
               
-              <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={6}>
                 <FormControlLabel
                   control={
                     <Switch 
@@ -1087,12 +1087,12 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   }
                   label="Rotate User-Agent"
                 />
-              </Grid>
+            </Grid>
               
-              <Grid item xs={12} md={6}>
-                <FormControlLabel
-                  control={
-                    <Switch 
+            <Grid item xs={12} md={6}>
+              <FormControlLabel
+                control={
+                  <Switch
                       checked={profileData.proxy.autoRotate || false}
                       onChange={(e) => handleChange('proxy', 'autoRotate', e.target.checked)}
                       color="primary"
@@ -1100,8 +1100,8 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                     />
                   }
                   label="Auto-Rotate Proxy"
-                />
-              </Grid>
+              />
+            </Grid>
               
               {profileData.proxy.autoRotate && (
                 <Grid item xs={12} md={6}>
@@ -1122,7 +1122,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                 </Grid>
               )}
               
-              <Grid item xs={12}>
+            <Grid item xs={12}>
                 <Divider sx={{ my: 1 }} />
               </Grid>
               
@@ -1595,7 +1595,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   </Box>
                 }
               />
-            </Grid>
+          </Grid>
             
             <Grid item xs={12}>
               <FormControlLabel
@@ -1618,7 +1618,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                     <Typography variant="caption" color="text.secondary">
                       Automatically uses your proxy IP information for WebRTC when in proxy mode
                     </Typography>
-                  </Box>
+          </Box>
                 }
               />
             </Grid>
@@ -1997,8 +1997,8 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
               
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
+              <TextField
+                fullWidth
                     label="Latitude"
                     value={profileData.geolocation?.latitude || ''}
                     onChange={(e) => handleChange('geolocation', 'latitude', e.target.value)}
@@ -2011,8 +2011,8 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                         </InputAdornment>
                       ),
                     }}
-                  />
-                </Grid>
+              />
+            </Grid>
                 
                 <Grid item xs={12} md={6}>
                   <TextField
@@ -2030,7 +2030,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                       ),
                     }}
                   />
-                </Grid>
+          </Grid>
                 
                 <Grid item xs={12}>
                   <Button 
@@ -2415,8 +2415,8 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
             {editingBookmarkId ? 'Edit Bookmark' : 'Add New Bookmark'}
           </Typography>
           
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={4}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
                 label="Title"
@@ -2456,7 +2456,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Folder</InputLabel>
-                  <Select
+                    <Select
                     value={newBookmark.folder}
                     onChange={(e) => setNewBookmark({...newBookmark, folder: e.target.value})}
                     label="Folder"
@@ -2471,9 +2471,9 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                     </MenuItem>
                     {bookmarkFolders.map((folder) => (
                       <MenuItem key={folder} value={folder}>{folder}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                      ))}
+                    </Select>
+                  </FormControl>
                 
                 <Tooltip title="Create New Folder">
                   <IconButton 
@@ -2516,7 +2516,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   </Button>
                 </Box>
               )}
-            </Grid>
+                </Grid>
           </Grid>
           
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
@@ -2690,13 +2690,13 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   <MenuItem value="119">Chrome 119</MenuItem>
                   <MenuItem value="118">Chrome 118</MenuItem>
                   <MenuItem value="117">Chrome 117</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+                    </Select>
+                  </FormControl>
+                </Grid>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Screen Resolution</InputLabel>
-                <Select
+                    <Select
                   value={profileData.fingerprint?.resolution || '1920x1080'}
                   onChange={(e) => handleNestedChange('fingerprint', 'resolution', e.target.value)}
                   label="Screen Resolution"
@@ -2706,10 +2706,10 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   <MenuItem value="3840x2160">3840x2160 (4K)</MenuItem>
                   <MenuItem value="1366x768">1366x768 (HD)</MenuItem>
                   <MenuItem value="1440x900">1440x900</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
         </Paper>
 
         {/* Canvas Fingerprinting */}
@@ -2795,7 +2795,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={6}>
+                <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="WebGL Vendor"
@@ -2829,7 +2829,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
             <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Device Memory</InputLabel>
-                <Select
+                    <Select
                   value={profileData.fingerprint?.deviceMemory || '8'}
                   onChange={(e) => handleNestedChange('fingerprint', 'deviceMemory', e.target.value)}
                   label="Device Memory"
@@ -2838,14 +2838,14 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   <MenuItem value="8">8 GB</MenuItem>
                   <MenuItem value="16">16 GB</MenuItem>
                   <MenuItem value="32">32 GB</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+                    </Select>
+                  </FormControl>
+                </Grid>
 
-            <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Hardware Concurrency</InputLabel>
-                <Select
+                      <Select
                   value={profileData.fingerprint?.hardwareConcurrency || '4'}
                   onChange={(e) => handleNestedChange('fingerprint', 'hardwareConcurrency', e.target.value)}
                   label="Hardware Concurrency"
@@ -2854,10 +2854,10 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                   <MenuItem value="4">4 Cores</MenuItem>
                   <MenuItem value="8">8 Cores</MenuItem>
                   <MenuItem value="16">16 Cores</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+              </Grid>
         </Paper>
 
         {/* Audio Context */}
@@ -2940,7 +2940,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                 }
                 label="Override media devices enumeration"
               />
-            </Grid>
+          </Grid>
 
             <Grid item xs={12}>
               <FormControlLabel
@@ -3539,7 +3539,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
           </Box>
           <TabPanel value={activeTab} index={0}>
             {renderOverviewTab()}
-          </TabPanel>
+        </TabPanel>
           <TabPanel value={activeTab} index={1}>
             {renderProxyTab()}
           </TabPanel>

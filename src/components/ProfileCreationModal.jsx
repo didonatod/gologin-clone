@@ -897,38 +897,38 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
     setIsLoadingProxy(true);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const content = e.target.result;
-          const lines = content.split('\n');
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const content = e.target.result;
+        const lines = content.split('\n');
+        
+        if (lines.length > 1) {
+          const headers = lines[0].split(',');
           
-          if (lines.length > 1) {
-            const headers = lines[0].split(',');
-            
             // Find column indexes
-            const ipIndex = headers.indexOf('ip');
-            const portIndex = headers.indexOf('port');
-            const protocolIndex = headers.indexOf('protocol');
-            const countryIndex = headers.indexOf('ip_data_country');
-            const countryCodeIndex = headers.indexOf('ip_data_countryCode');
-            const cityIndex = headers.indexOf('ip_data_city');
-            const ispIndex = headers.indexOf('ip_data_isp');
-            const timeoutIndex = headers.indexOf('timeout');
-            const timezoneIndex = headers.indexOf('ip_data_timezone');
-            const latIndex = headers.indexOf('ip_data_lat');
-            const lonIndex = headers.indexOf('ip_data_lon');
-            
+          const ipIndex = headers.indexOf('ip');
+          const portIndex = headers.indexOf('port');
+          const protocolIndex = headers.indexOf('protocol');
+          const countryIndex = headers.indexOf('ip_data_country');
+          const countryCodeIndex = headers.indexOf('ip_data_countryCode');
+          const cityIndex = headers.indexOf('ip_data_city');
+          const ispIndex = headers.indexOf('ip_data_isp');
+          const timeoutIndex = headers.indexOf('timeout');
+          const timezoneIndex = headers.indexOf('ip_data_timezone');
+          const latIndex = headers.indexOf('ip_data_lat');
+          const lonIndex = headers.indexOf('ip_data_lon');
+          
             // Process first valid proxy
             for (let i = 1; i < lines.length; i++) {
               if (!lines[i].trim()) continue;
+            
+            const proxyData = lines[i].split(',');
+            
+            if (ipIndex !== -1 && portIndex !== -1) {
+              const ip = proxyData[ipIndex];
+              const port = proxyData[portIndex];
               
-              const proxyData = lines[i].split(',');
-              
-              if (ipIndex !== -1 && portIndex !== -1) {
-                const ip = proxyData[ipIndex];
-                const port = proxyData[portIndex];
-                
                 if (ip && port) {
                   const protocol = protocolIndex !== -1 ? proxyData[protocolIndex] : 'http';
                   const country = countryIndex !== -1 ? proxyData[countryIndex] : 'Unknown';
@@ -952,17 +952,17 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                       ...prev.proxy,
                       enabled: true,
                       type: proxyType,
-                      ip,
-                      port,
-                      country,
-                      countryCode,
-                      city,
-                      isp,
-                      timeout,
+                    ip,
+                    port,
+                    country,
+                    countryCode,
+                    city,
+                    isp,
+                    timeout,
                       isAlive: true,
-                      timezone,
-                      lat,
-                      lon
+                    timezone,
+                    lat,
+                    lon
                     }
                   }));
                   
@@ -970,18 +970,18 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                 }
               }
             }
-          }
-        } catch (error) {
-          console.error('Error parsing proxy file:', error);
         }
-      };
-      
-      reader.readAsText(file);
+      } catch (error) {
+        console.error('Error parsing proxy file:', error);
+      }
+    };
+    
+    reader.readAsText(file);
     } catch (error) {
       console.error('Error reading proxy file:', error);
     } finally {
       setIsLoadingProxy(false);
-      event.target.value = '';
+    event.target.value = '';
     }
   };
 
@@ -1592,67 +1592,67 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
             </Button>
           </Box>
         </Paper>
-
+        
         <Typography variant="subtitle1" gutterBottom sx={{ mt: 3, fontWeight: 500 }}>
           Your Bookmarks ({profileData.bookmarks.length})
         </Typography>
-
+        
         {profileData.bookmarks.length === 0 ? (
           <Alert severity="info" sx={{ mb: 3 }}>
             No bookmarks added yet. Add your first bookmark using the form above.
           </Alert>
         ) : (
-          <List sx={{ 
-            bgcolor: 'background.paper',
-            border: '1px solid rgba(0, 0, 0, 0.12)',
+                  <List sx={{ 
+                    bgcolor: 'background.paper',
+                    border: '1px solid rgba(0, 0, 0, 0.12)',
             borderRadius: 1
           }}>
             {profileData.bookmarks.map((bookmark, index) => (
               <React.Fragment key={bookmark.id}>
                 {index > 0 && <Divider />}
                 <ListItem>
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    <DragIndicatorIcon sx={{ color: 'text.disabled' }} />
-                  </ListItemIcon>
-                  <ListItemAvatar>
-                    <Avatar 
-                      sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}
-                      src={`https://www.google.com/s2/favicons?domain=${bookmark.url}&sz=64`}
-                    >
-                      <BookmarkIcon sx={{ fontSize: 16 }} />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText 
-                    primary={bookmark.name}
-                    secondary={bookmark.url}
-                    primaryTypographyProps={{ variant: 'body2' }}
-                    secondaryTypographyProps={{ variant: 'caption' }}
-                  />
-                  <ListItemSecondaryAction>
-                    <Tooltip title="Edit">
-                      <IconButton 
-                        edge="end" 
-                        onClick={() => handleEditBookmark(bookmark)}
-                        size="small"
-                        sx={{ mr: 1 }}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Remove">
-                      <IconButton 
-                        edge="end" 
-                        onClick={() => handleRemoveBookmark(bookmark.id)}
-                        size="small"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </ListItemSecondaryAction>
-                </ListItem>
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <DragIndicatorIcon sx={{ color: 'text.disabled' }} />
+                        </ListItemIcon>
+                        <ListItemAvatar>
+                          <Avatar 
+                            sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}
+                            src={`https://www.google.com/s2/favicons?domain=${bookmark.url}&sz=64`}
+                          >
+                            <BookmarkIcon sx={{ fontSize: 16 }} />
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText 
+                          primary={bookmark.name}
+                          secondary={bookmark.url}
+                          primaryTypographyProps={{ variant: 'body2' }}
+                          secondaryTypographyProps={{ variant: 'caption' }}
+                        />
+                        <ListItemSecondaryAction>
+                          <Tooltip title="Edit">
+                            <IconButton 
+                              edge="end" 
+                              onClick={() => handleEditBookmark(bookmark)}
+                              size="small"
+                              sx={{ mr: 1 }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Remove">
+                            <IconButton 
+                              edge="end" 
+                              onClick={() => handleRemoveBookmark(bookmark.id)}
+                              size="small"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </ListItemSecondaryAction>
+                      </ListItem>
               </React.Fragment>
-            ))}
-          </List>
+                    ))}
+                  </List>
         )}
 
         {/* Import/Export Section */}
