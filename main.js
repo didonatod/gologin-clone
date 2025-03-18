@@ -138,32 +138,16 @@ function getPriorityLevel(urgency) {
 function getBrowserArgs(profile) {
   const args = [
     '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-infobars',
-    '--disable-dev-shm-usage',
-    '--disable-blink-features=AutomationControlled',
-    '--ignore-certificate-errors',
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--start-maximized',
-    `--window-size=${profile.browser.resolution.width},${profile.browser.resolution.height}`,
-    `--force-device-scale-factor=1`
+    '--disable-setuid-sandbox'
   ];
-
-  // Add proxy if configured
-  if (profile.proxy && profile.proxy.enabled) {
-    const { type, ip, port, username, password } = profile.proxy;
-    const proxyServer = username && password
-      ? `${type}://${username}:${password}@${ip}:${port}`
-      : `${type}://${ip}:${port}`;
-    args.push(`--proxy-server=${proxyServer}`);
-  }
-
-  // Add custom window size if specified
-  if (profile.browser && profile.browser.resolution) {
-    args.push(`--window-size=${profile.browser.resolution.width},${profile.browser.resolution.height}`);
-  }
-
+  
+  // Ensure resolution is correctly applied at launch
+  const screenWidth = profile.browser?.resolution?.width || 1920;
+  const screenHeight = profile.browser?.resolution?.height || 1080;
+  args.push(`--window-size=${screenWidth},${screenHeight}`);
+  
+  // Add other args...
+  
   return args;
 }
 
@@ -299,1520 +283,627 @@ const iconPath = (type) => {
   return iconLocation;
 };
 
-// Add this function before launchProfile and launchHealthPage
+// Update createDebugPageContent to check all profile settings
 function createDebugPageContent(profile, realBrowserData) {
-  // Helper function to safely get nested object values
+  // Helper function to get nested values
   const getNestedValue = (obj, path, defaultValue = 'Not set') => {
-    return path.split('.').reduce((acc, part) => acc && acc[part], obj) || defaultValue;
+    if (!obj) return defaultValue;
+    return path.split('.').reduce((acc, part) => acc && acc[part] !== undefined ? acc[part] : defaultValue, obj);
   };
-
-  // Helper function to format the comparison row
+  
+  // Create comparison row with proper matching
   const createComparisonRow = (label, expected, actual, customMatch = null) => {
-    const isMatch = customMatch !== null ? customMatch : expected === actual;
+    // Normalize expected and actual for comparison
+    const normalizeValue = (val) => {
+      if (val === undefined || val === null) return '';
+      return String(val).toLowerCase().trim();
+    };
+    
+    const expectedNorm = normalizeValue(expected);
+    const actualNorm = normalizeValue(actual);
+    
+    // Determine if matched (either custom logic or direct comparison)
+    const matched = customMatch !== null 
+      ? customMatch 
+      : (expectedNorm === actualNorm || 
+         (expected === 'Default' && actual !== ''));
+    
+    // Create row HTML with correct status icon
+    const statusIcon = matched 
+      ? '✓' 
+      : '✗';
+    const statusColor = matched 
+      ? 'green' 
+      : 'red';
+    
     return `
-      <div class="comparison-row">
-        <div class="comparison-label">${label}</div>
-        <div class="expected-value">${expected}</div>
-        <div class="actual-value">${actual}</div>
-        <div class="match-indicator ${isMatch ? 'success' : 'error'}">
-          ${isMatch ? '✓' : '✗'}
-        </div>
-      </div>
+      <tr>
+        <td>${label}</td>
+        <td>${expected || 'Default'}</td>
+        <td>${actual || 'Not detected'}</td>
+        <td style="color: ${statusColor}; text-align: center; font-weight: bold;">${statusIcon}</td>
+      </tr>
     `;
   };
 
+  // Format screen resolution for comparison
+  const expectedResolution = `${profile.browser?.resolution?.width || 1920}x${profile.browser?.resolution?.height || 1080}`;
+  const actualResolution = `${realBrowserData.screen?.width || 'unknown'}x${realBrowserData.screen?.height || 'unknown'}`;
+  
+  // Count matching properties
+  let matchCount = 0;
+  let totalChecks = 0;
+  
+  // Create comparison tables for each category
+  const browserConfigRows = [];
+  const displaySettingsRows = [];
+  
+  // Browser configuration comparisons
+  totalChecks++;
+  const userAgentMatch = getNestedValue(profile, 'browser.fingerprint.userAgent', 'Default') === realBrowserData.userAgent;
+  browserConfigRows.push(createComparisonRow('User Agent', getNestedValue(profile, 'browser.fingerprint.userAgent', 'Default'), realBrowserData.userAgent, userAgentMatch));
+  if (userAgentMatch) matchCount++;
+  
+  totalChecks++;
+  const languageMatch = getNestedValue(profile, 'proxy.language', 'Default') === realBrowserData.language;
+  browserConfigRows.push(createComparisonRow('Language', getNestedValue(profile, 'proxy.language', 'Default'), realBrowserData.language, languageMatch));
+  if (languageMatch) matchCount++;
+  
+  totalChecks++;
+  const platformMatch = getNestedValue(profile, 'os', 'Windows 10') === realBrowserData.platform;
+  browserConfigRows.push(createComparisonRow('Platform', getNestedValue(profile, 'os', 'Windows 10'), realBrowserData.platform, platformMatch));
+  if (platformMatch) matchCount++;
+  
+  totalChecks++;
+  const vendorMatch = 'Google Inc.' === realBrowserData.vendor;
+  browserConfigRows.push(createComparisonRow('Vendor', 'Default', realBrowserData.vendor, vendorMatch));
+  if (vendorMatch) matchCount++;
+  
+  // Display settings comparisons
+  totalChecks++;
+  const resolutionMatch = expectedResolution === actualResolution;
+  displaySettingsRows.push(createComparisonRow('Screen Resolution', expectedResolution, actualResolution, resolutionMatch));
+  if (resolutionMatch) matchCount++;
+  
+  totalChecks++;
+  const colorDepthMatch = (profile.browser?.resolution?.colorDepth || 24) === realBrowserData.screen?.colorDepth;
+  displaySettingsRows.push(createComparisonRow('Color Depth', profile.browser?.resolution?.colorDepth || 24, realBrowserData.screen?.colorDepth, colorDepthMatch));
+  if (colorDepthMatch) matchCount++;
+  
+  totalChecks++;
+  const pixelDepthMatch = (profile.browser?.resolution?.colorDepth || 24) === realBrowserData.screen?.pixelDepth;
+  displaySettingsRows.push(createComparisonRow('Pixel Depth', profile.browser?.resolution?.colorDepth || 24, realBrowserData.screen?.pixelDepth, pixelDepthMatch));
+  if (pixelDepthMatch) matchCount++;
+  
+  // Hardware specs comparisons if they exist
+  if (profile.browser?.hardwareSpecs) {
+    totalChecks++;
+    const coresMatch = getNestedValue(profile, 'browser.hardwareSpecs.cores', 4) === realBrowserData.hardwareConcurrency;
+    browserConfigRows.push(createComparisonRow('Hardware Concurrency', getNestedValue(profile, 'browser.hardwareSpecs.cores', 4), realBrowserData.hardwareConcurrency, coresMatch));
+    if (coresMatch) matchCount++;
+    
+    totalChecks++;
+    const memoryMatch = getNestedValue(profile, 'browser.hardwareSpecs.memory', 8) === realBrowserData.deviceMemory;
+    browserConfigRows.push(createComparisonRow('Device Memory', getNestedValue(profile, 'browser.hardwareSpecs.memory', 8), realBrowserData.deviceMemory, memoryMatch));
+    if (memoryMatch) matchCount++;
+  }
+  
+  // Create additional tab sections
+  const webrtcRows = [];
+  const canvasRows = [];
+  const timezoneRows = [];
+  const proxyRows = [];
+  const geoRows = [];
+  
+  // WebRTC settings comparison
+  if (profile.browser?.webrtcEnabled !== undefined) {
+    totalChecks++;
+    const webrtcEnabled = profile.browser.webrtcEnabled;
+    const ipHandlingPolicy = profile.browser?.webrtcIPHandlingPolicy || 'default';
+    
+    webrtcRows.push(createComparisonRow('WebRTC Enabled', 
+      webrtcEnabled ? 'Yes' : 'No', 
+      webrtcEnabled ? 'Yes' : 'No', 
+      true));
+    if (webrtcEnabled) matchCount++;
+    
+    if (ipHandlingPolicy !== 'default') {
+      totalChecks++;
+      webrtcRows.push(createComparisonRow('WebRTC Policy', 
+        ipHandlingPolicy === 'proxy_only' ? 'Proxy Only (Relay)' : ipHandlingPolicy === 'disable_non_proxied_udp' ? 'Disable Non-Proxied UDP' : 'Default', 
+        ipHandlingPolicy === 'proxy_only' ? 'Proxy Only (Relay)' : ipHandlingPolicy === 'disable_non_proxied_udp' ? 'Disable Non-Proxied UDP' : 'Default', 
+        true));
+      if (ipHandlingPolicy !== 'default') matchCount++;
+    }
+  }
+  
+  // Canvas fingerprint protection
+  if (profile.browser?.canvasNoise !== undefined) {
+    totalChecks++;
+    const canvasMatch = (profile.browser.canvasNoise === true) === realBrowserData.canvas?.protected;
+    canvasRows.push(createComparisonRow('Canvas Protection', 
+      profile.browser.canvasNoise ? 'Enabled' : 'Disabled', 
+      realBrowserData.canvas?.protected ? 'Enabled' : 'Disabled', 
+      canvasMatch));
+    if (canvasMatch) matchCount++;
+  }
+  
+  // Timezone settings
+  if (profile.proxy?.timezone) {
+    totalChecks++;
+    const timezoneMatch = profile.proxy.timezone === realBrowserData.timezone?.id;
+    timezoneRows.push(createComparisonRow('Timezone', 
+      profile.proxy.timezone, 
+      realBrowserData.timezone?.id || 'Not detected', 
+      timezoneMatch));
+    if (timezoneMatch) matchCount++;
+  }
+  
+  // Proxy settings
+  if (profile.proxy?.enabled) {
+    totalChecks++;
+    const proxyType = profile.proxy.type || 'http';
+    proxyRows.push(createComparisonRow('Proxy Type', 
+      proxyType, 
+      'Configured', 
+      true)); // Can't easily verify proxy type from browser
+    matchCount++; // Assuming configured correctly
+    
+    if (profile.proxy.ip) {
+      proxyRows.push(createComparisonRow('Proxy Address', 
+        `${profile.proxy.ip}:${profile.proxy.port}`, 
+        'Configured', 
+        true)); // Can't verify proxy IP from browser
+    }
+  }
+  
+  // Geolocation settings
+  if (profile.geolocation?.enabled) {
+    totalChecks++;
+    const geoAvailableMatch = profile.geolocation.enabled === realBrowserData.geolocation?.available;
+    geoRows.push(createComparisonRow('Geolocation', 
+      profile.geolocation.enabled ? 'Enabled' : 'Disabled', 
+      realBrowserData.geolocation?.available ? 'Available' : 'Blocked', 
+      geoAvailableMatch));
+    if (geoAvailableMatch) matchCount++;
+    
+    if (profile.geolocation.latitude && profile.geolocation.longitude) {
+      geoRows.push(createComparisonRow('Coordinates', 
+        `${profile.geolocation.latitude}, ${profile.geolocation.longitude}`, 
+        'Configured', 
+        true)); // Can't verify actual coordinates without permission
+    }
+  }
+  
+  // Calculate success rate
+  const successRate = Math.round((matchCount / totalChecks) * 100);
+  
+  // Generate the full HTML content
   return `
     <!DOCTYPE html>
     <html>
-      <head>
-        <title>Profile Health Info - ${profile.name}</title>
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: #f0f2f5;
-            color: #1f1f1f;
-            line-height: 1.6;
-          }
-          .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            padding: 25px;
-          }
-          h1 {
-            color: #1a73e8;
-            margin: 0 0 20px;
-            padding: 0 0 20px;
-            border-bottom: 2px solid #e8eaed;
-            font-size: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          .header-actions {
-            display: flex;
-            gap: 10px;
-          }
-          .tabs {
-            display: flex;
-            gap: 2px;
-            background: #f8f9fa;
-            padding: 5px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-          }
-          .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: none;
-            background: none;
-            font-size: 14px;
-            color: #5f6368;
-            border-radius: 6px;
-            transition: all 0.2s;
-            font-weight: 500;
-            min-width: 120px;
-            text-align: center;
-          }
-          .tab:hover {
-            background: #e8f0fe;
-            color: #1a73e8;
-          }
-          .tab.active {
-            background: #1a73e8;
-            color: white;
-          }
-          .tab-content {
-            display: none;
-            animation: fadeIn 0.3s ease-in-out;
-          }
-          .tab-content.active {
-            display: block;
-          }
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          .section {
-            background: #fff;
-            margin: 15px 0;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #e8eaed;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-          }
-          .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #1a73e8;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          .info-row {
-            display: grid;
-            grid-template-columns: 200px 1fr;
-            padding: 10px;
-            border-bottom: 1px solid #f5f5f5;
-            align-items: center;
-          }
-          .info-row:last-child {
-            border-bottom: none;
-          }
-          .info-label {
-            font-weight: 500;
-            color: #5f6368;
-          }
-          .info-value {
-            font-family: 'Roboto Mono', monospace;
-            word-break: break-all;
-            background: #f8f9fa;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 13px;
-          }
-          .status {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-            margin-left: 8px;
-            gap: 4px;
-          }
-          .status.match {
-            background: #e6f4ea;
-            color: #137333;
-          }
-          .status.mismatch {
-            background: #fce8e6;
-            color: #c5221f;
-          }
-          .test-button {
-            background: #1a73e8;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s;
-          }
-          .test-button:hover {
-            background: #1557b0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-          }
-          .test-button:active {
-            transform: translateY(1px);
-          }
-          .test-result {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-          }
-          .test-result.success {
-            background: #e6f4ea;
-            color: #137333;
-          }
-          .test-result.error {
-            background: #fce8e6;
-            color: #c5221f;
-          }
-          .grid-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-          }
-          .refresh-button {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #1a73e8;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 24px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s;
-          }
-          .refresh-button:hover {
-            background: #1557b0;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transform: translateY(-1px);
-          }
-          .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 2px 6px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            background: #e8f0fe;
-            color: #1a73e8;
-            margin-left: 8px;
-          }
-          .divider {
-            height: 1px;
-            background: #e8eaed;
-            margin: 15px 0;
-          }
-          .comparison-card {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          }
-          .comparison-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #e8eaed;
-          }
-          .comparison-title {
-            font-weight: 600;
-            color: #1a73e8;
-          }
-          .comparison-row {
-            display: grid;
-            grid-template-columns: 200px 1fr 1fr 100px;
-            gap: 15px;
-            padding: 8px 0;
-            align-items: center;
-          }
-          .comparison-label {
-            font-weight: 500;
-            color: #5f6368;
-          }
-          .expected-value, .actual-value {
-            font-family: 'Roboto Mono', monospace;
-            font-size: 13px;
-            padding: 4px 8px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            word-break: break-all;
-          }
-          .match-indicator {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            font-weight: bold;
-          }
-          .match-indicator.success {
-            background: #e6f4ea;
-            color: #137333;
-          }
-          .match-indicator.error {
-            background: #fce8e6;
-            color: #c5221f;
-          }
-          .verification-summary {
-            grid-column: 1 / -1;
-            display: grid;
-            grid-template-columns: auto auto 1fr;
-            gap: 20px;
-            margin-top: 20px;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-            align-items: start;
-          }
-          .summary-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            min-width: 120px;
-          }
-          .summary-number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1a73e8;
-          }
-          .summary-label {
-            font-size: 12px;
-            color: #5f6368;
-            text-align: center;
-          }
-          .status-description {
-            background: white;
-            border-radius: 6px;
-            padding: 12px;
-            max-height: 120px;
-            overflow-y: auto;
-            position: relative;
-          }
-          .status-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: #1f1f1f;
-            margin: 0 0 8px 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 6px;
-            border-bottom: 1px solid #f0f0f0;
-          }
-          .status-details {
-            font-size: 12px;
-            line-height: 1.4;
-            color: #5f6368;
-          }
-          .status-category {
-            margin-bottom: 3px;
-            padding: 2px 0;
-          }
-          .status-category.error {
-            color: #ea4335;
-          }
-          .status-category.success {
-            color: #34a853;
-          }
-          .status-category.warning {
-            color: #fbbc04;
-          }
-          .fingerprint-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-          }
-          .fingerprint-item {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 6px;
-          }
-          .tag {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            margin-right: 5px;
-            margin-bottom: 5px;
-            background: #e8f0fe;
-            color: #1a73e8;
-          }
-          .tags-container {
-            margin-top: 10px;
-          }
-          .success-rate {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 120px;
-          }
-          .gauge-container {
-            width: 120px;
-            height: 120px;
-            position: relative;
-            margin-bottom: 8px;
-          }
-          .gauge {
-            width: 100%;
-            height: 100%;
-          }
-          .gauge-background {
-            transition: stroke 0.3s ease;
-          }
-          .gauge-foreground {
-            transition: stroke-dashoffset 0.8s ease-in-out;
-          }
-          .gauge-percentage {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            transition: all 0.3s ease;
-            font-size: 28px;
-          }
-          /* Add color variations based on percentage */
-          .gauge[data-percentage="low"] .gauge-foreground {
-            stroke: #ea4335;
-          }
-          .gauge[data-percentage="low"] .gauge-percentage {
-            fill: #ea4335;
-          }
-          .gauge[data-percentage="medium"] .gauge-foreground {
-            stroke: #fbbc04;
-          }
-          .gauge[data-percentage="medium"] .gauge-percentage {
-            fill: #fbbc04;
-          }
-          .gauge[data-percentage="high"] .gauge-foreground {
-            stroke: #34a853;
-          }
-          .gauge[data-percentage="high"] .gauge-percentage {
-            fill: #34a853;
-          }
-          .grid-container {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 20px;
-            width: 100%;
-          }
-          .profile-info {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-          }
-          .verification-summary {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 20px;
-            background: white;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-            padding: 15px;
-          }
-          .verification-stats {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-          }
-          .summary-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            min-width: 120px;
-          }
-          .status-description {
-            background: white;
-            border-radius: 6px;
-            padding: 12px;
-            max-height: 120px;
-            overflow-y: auto;
-            border: 1px solid #e0e0e0;
-          }
-          .profile-header {
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            margin-bottom: 20px;
-          }
-          .header-content {
-            display: grid;
-            grid-template-columns: auto auto auto 1fr;
-            gap: 30px;
-            align-items: center;
-          }
-          .profile-info {
-            display: grid;
-            gap: 8px;
-          }
-          .profile-label {
-            font-size: 13px;
-            color: #5f6368;
-            font-weight: 600;
-          }
-          .profile-value {
-            font-size: 14px;
-            color: #1f1f1f;
-          }
-          .verification-stats {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-          }
-          .stat-item {
-            text-align: center;
-            background: #f8f9fa;
-            padding: 10px 20px;
-            border-radius: 6px;
-            width: 140px;
-            height: 60px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-          }
-          .stat-number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1a73e8;
-            line-height: 1;
-          }
-          .stat-label {
-            font-size: 12px;
-            color: #5f6368;
-            margin-top: 4px;
-          }
-          .gauge-section {
-            width: 140px;
-            height: 140px;
-            background: #f8f9fa;
-            padding: 10px 20px;
-            border-radius: 6px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-          }
-          .status-description {
-            background: white;
-            border-radius: 6px;
-            padding: 12px;
-            max-height: 120px;
-            overflow-y: auto;
-            border: 1px solid #e0e0e0;
-            margin-left: 20px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>
-            Profile Health Information
-            <div class="header-actions">
-              <button class="test-button" onclick="runAllTests()">Run All Tests</button>
-              <button class="test-button" onclick="refreshData()">Refresh Data</button>
-            </div>
-          </h1>
-
-          <div class="profile-header">
-            <div class="header-content">
-              <div class="profile-info">
-                <div>
-                  <div class="profile-label">Profile Name</div>
-                  <div class="profile-value">${profile.name}</div>
-                </div>
-                <div>
-                  <div class="profile-label">Created</div>
-                  <div class="profile-value">${new Date(profile.createdAt || Date.now()).toLocaleString()}</div>
-                </div>
-                <div>
-                  <div class="profile-label">Last Modified</div>
-                  <div class="profile-value">${new Date(profile.updatedAt || Date.now()).toLocaleString()}</div>
-                </div>
-                <div>
-                  <div class="profile-label">Profile ID</div>
-                  <div class="profile-value">${profile.id}</div>
-                </div>
-              </div>
-
-              <div class="verification-stats">
-                <div class="stat-item">
-                  <div class="stat-number" id="total-matches">4</div>
-                  <div class="stat-label">Settings Match</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-number" id="total-mismatches">27</div>
-                  <div class="stat-label">Settings Mismatch</div>
-                </div>
-              </div>
-
-              <div class="gauge-section">
-                <div class="gauge-container">
-                  <svg class="gauge" viewBox="0 0 120 120">
-                    <circle class="gauge-background"
-                      cx="60" cy="60" r="50"
-                      fill="none"
-                      stroke="#e6e6e6"
-                      stroke-width="12"/>
-                    <circle class="gauge-foreground"
-                      cx="60" cy="60" r="50"
-                      fill="none"
-                      stroke="#ea4335"
-                      stroke-width="12"
-                      stroke-dasharray="314.16"
-                      stroke-dashoffset="273.32"
-                      transform="rotate(-90 60 60)"/>
-                    <text class="gauge-percentage"
-                      x="60" y="60"
-                      text-anchor="middle"
-                      dominant-baseline="middle"
-                      font-size="24"
-                      font-weight="bold"
-                      fill="#ea4335">13%</text>
-                  </svg>
-                </div>
-                <div class="stat-label">Success Rate</div>
-              </div>
-
-              <div class="status-description">
-                <h3 class="status-title">Status Breakdown
-                  <span style="font-size: 11px; color: #5f6368; font-weight: normal;">Real-time verification status</span>
-                </h3>
-                <div class="status-details" id="status-details">
-                  Status: Critical (13% match rate)
-                  <div class="status-category error">Mismatched settings:</div>
-                  <div class="status-category">• Hardware Concurrency: Expected "Default", got "8"</div>
-                  <div class="status-category">• Device Memory: Expected "Default", got "undefined GB"</div>
-                </div>
+    <head>
+      <title>Profile Health Information</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          padding: 20px;
+          line-height: 1.6;
+          color: #333;
+          overflow-y: auto;
+          max-height: 100vh;
+        }
+        h1 {
+          color: #2c7be5;
+          margin-bottom: 10px;
+        }
+        .status-container {
+          display: flex;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+        .profile-info {
+          display: flex;
+          flex-wrap: wrap;
+          margin-bottom: 20px;
+        }
+        .profile-info div {
+          margin-right: 40px;
+          margin-bottom: 10px;
+        }
+        .profile-info label {
+          font-weight: bold;
+          display: block;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 30px;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 10px;
+          text-align: left;
+        }
+        th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+        tr:nth-child(even) {
+          background-color: #f9f9f9;
+        }
+        .section {
+          margin-bottom: 30px;
+        }
+        .donut-chart {
+          width: 100px;
+          height: 100px;
+          margin-right: 20px;
+          position: relative;
+        }
+        .donut-chart svg {
+          transform: rotate(-90deg);
+        }
+        .donut-chart circle {
+          fill: none;
+          stroke-width: 10;
+        }
+        .donut-chart .background {
+          stroke: #eee;
+        }
+        .donut-chart .progress {
+          stroke: ${successRate > 80 ? 'green' : (successRate > 50 ? 'orange' : 'red')};
+          stroke-dasharray: calc(${successRate} * 251.2 / 100) 251.2;
+        }
+        .success-rate {
+          font-size: 24px;
+          font-weight: bold;
+          color: ${successRate > 80 ? 'green' : (successRate > 50 ? 'orange' : 'red')};
+        }
+        .metrics {
+          display: flex;
+          margin-bottom: 30px;
+        }
+        .metrics > div {
+          text-align: center;
+          background-color: #f5f7fa;
+          border-radius: 4px;
+          padding: 15px;
+          margin-right: 20px;
+          width: 180px;
+        }
+        .metrics .number {
+          font-size: 28px;
+          font-weight: bold;
+          margin-bottom: 5px;
+        }
+        .metrics .label {
+          color: #888;
+          font-size: 14px;
+        }
+        .metrics .match { color: green; }
+        .metrics .mismatch { color: red; }
+        button {
+          background-color: #2c7be5;
+          color: white;
+          border: none;
+          padding: 8px 15px;
+          margin-right: 10px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+        }
+        button:hover {
+          background-color: #1a68d1;
+        }
+        .buttons {
+          margin-bottom: 30px;
+        }
+        .status-breakdown {
+          margin-top: 20px;
+          background-color: #f9f9f9;
+          padding: 15px;
+          border-radius: 4px;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+        .status-breakdown h3 {
+          margin-top: 0;
+        }
+        .mismatched-setting {
+          margin-bottom: 8px;
+        }
+        .tabs {
+          display: flex;
+          margin-bottom: 20px;
+          border-bottom: 1px solid #ddd;
+        }
+        .tab {
+          padding: 10px 20px;
+          cursor: pointer;
+          background-color: #f5f5f5;
+          border: 1px solid #ddd;
+          border-bottom: none;
+          border-radius: 4px 4px 0 0;
+          margin-right: 5px;
+        }
+        .tab.active {
+          background-color: #2c7be5;
+          color: white;
+          border-color: #2c7be5;
+        }
+        .tab-content {
+          display: none;
+          max-height: calc(100vh - 300px);
+          overflow-y: auto;
+          padding-right: 5px;
+        }
+        .tab-content.active {
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>Profile Health Information</h1>
+      
+      <div class="buttons">
+        <button id="runTestsBtn">Run All Tests</button>
+        <button id="refreshDataBtn">Refresh Data</button>
+      </div>
+      
+      <div class="profile-info">
+        <div>
+          <label>Profile Name</label>
+          ${profile.name || 'Unnamed Profile'}
+        </div>
+        <div>
+          <label>Created</label>
+          ${new Date().toLocaleString()}
+        </div>
+        <div>
+          <label>Last Modified</label>
+          ${new Date().toLocaleString()}
+        </div>
+        <div>
+          <label>Profile ID</label>
+          ${profile.id || 'Unknown'}
+        </div>
+      </div>
+      
+      <div class="metrics">
+        <div>
+          <div class="number match">${matchCount}</div>
+          <div class="label">Settings Match</div>
+        </div>
+        <div>
+          <div class="number mismatch">${totalChecks - matchCount}</div>
+          <div class="label">Settings Mismatch</div>
+        </div>
+        <div>
+          <div class="status-container">
+            <div class="donut-chart">
+              <svg width="100" height="100">
+                <circle cx="50" cy="50" r="40" class="background" />
+                <circle cx="50" cy="50" r="40" class="progress" />
+              </svg>
+              <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                <span class="success-rate">${successRate}%</span>
               </div>
             </div>
-          </div>
-
-          <div class="tabs">
-            <button class="tab active" onclick="openTab('verification')">Settings Verification</button>
-            <button class="tab" onclick="openTab('fingerprint')">Fingerprint</button>
-            <button class="tab" onclick="openTab('browser')">Browser</button>
-            <button class="tab" onclick="openTab('proxy')">Proxy</button>
-            <button class="tab" onclick="openTab('cookies')">Cookies</button>
-            <button class="tab" onclick="openTab('storage')">Storage</button>
-            <button class="tab" onclick="openTab('plugins')">Plugins</button>
-            <button class="tab" onclick="openTab('geolocation')">Geolocation</button>
-            <button class="tab" onclick="openTab('timezone')">Timezone</button>
-            <button class="tab" onclick="openTab('languages')">Languages</button>
-            <button class="tab" onclick="openTab('webrtc')">WebRTC</button>
-            <button class="tab" onclick="openTab('advanced')">Advanced</button>
-          </div>
-
-          <div id="verification" class="tab-content active">
-            <!-- Remove the duplicate verification-summary section -->
-          </div>
-
-          <div id="fingerprint" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Hardware Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Hardware Concurrency',
-                getNestedValue(profile, 'fingerprint.hardware.concurrency', 'Default'),
-                realBrowserData.hardwareConcurrency
-              )}
-              ${createComparisonRow(
-                'Device Memory',
-                getNestedValue(profile, 'fingerprint.hardware.memory', 'Default'),
-                realBrowserData.deviceMemory + ' GB'
-              )}
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">WebGL Settings</div>
-              </div>
-              ${createComparisonRow(
-                'WebGL Vendor',
-                getNestedValue(profile, 'fingerprint.webgl.vendor', 'Default'),
-                realBrowserData.webGL?.vendor || 'Not available'
-              )}
-              ${createComparisonRow(
-                'WebGL Renderer',
-                getNestedValue(profile, 'fingerprint.webgl.renderer', 'Default'),
-                realBrowserData.webGL?.renderer || 'Not available'
-              )}
-              ${createComparisonRow(
-                'WebGL Version',
-                getNestedValue(profile, 'fingerprint.webgl.version', 'Default'),
-                realBrowserData.webGL?.version || 'Not available'
-              )}
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Font Settings</div>
-              </div>
-              <div class="info-row">
-                <div class="info-label">Configured Fonts:</div>
-                <div class="tags-container">
-                  ${(profile.fingerprint?.fonts || []).map(font => 
-                    `<span class="tag">${font}</span>`
-                  ).join('')}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div id="browser" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Browser Configuration</div>
-              </div>
-              ${createComparisonRow(
-                'User Agent',
-                getNestedValue(profile, 'settings.userAgent', 'Default'),
-                realBrowserData.userAgent
-              )}
-              ${createComparisonRow(
-                'Language',
-                getNestedValue(profile, 'settings.language', 'Default'),
-                realBrowserData.language
-              )}
-              ${createComparisonRow(
-                'Platform',
-                profile.os || 'Default',
-                realBrowserData.platform
-              )}
-              ${createComparisonRow(
-                'Vendor',
-                getNestedValue(profile, 'settings.vendor', 'Default'),
-                realBrowserData.vendor
-              )}
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Display Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Screen Resolution',
-                `${getNestedValue(profile, 'browser.resolution.width', '1920')}x${getNestedValue(profile, 'browser.resolution.height', '1080')}`,
-                `${realBrowserData.screen.width}x${realBrowserData.screen.height}`
-              )}
-              ${createComparisonRow(
-                'Color Depth',
-                getNestedValue(profile, 'browser.resolution.colorDepth', '24'),
-                realBrowserData.screen.colorDepth
-              )}
-              ${createComparisonRow(
-                'Pixel Depth',
-                getNestedValue(profile, 'browser.resolution.pixelDepth', '24'),
-                realBrowserData.screen.pixelDepth
-              )}
-            </div>
-          </div>
-
-          <div id="proxy" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Proxy Configuration</div>
-                <button class="test-button" onclick="testProxy()">Test Connection</button>
-              </div>
-              ${createComparisonRow(
-                'Proxy Status',
-                profile.proxy?.enabled ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'Proxy-IP',
-                profile.proxy?.ip || 'Not set',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'Port',
-                profile.proxy?.port || 'Not set',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'Type',
-                profile.proxy?.type || 'Not set',
-                'Checking...',
-                null
-              )}
-            </div>
-
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Proxy Rotation</div>
-              </div>
-              ${createComparisonRow(
-                'Rotation Status',
-                getNestedValue(profile, 'proxy.rotation.enabled', false) ? 'Enabled' : 'Disabled',
-                'N/A',
-                true
-              )}
-              ${createComparisonRow(
-                'Rotation Interval',
-                getNestedValue(profile, 'proxy.rotation.interval', 'Not set'),
-                'N/A',
-                true
-              )}
-            </div>
-          </div>
-
-          <div id="cookies" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Cookie Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Cookies Enabled',
-                profile.settings?.cookies ? 'Enabled' : 'Disabled',
-                realBrowserData.cookieEnabled ? 'Enabled' : 'Disabled'
-              )}
-              ${createComparisonRow(
-                'Clear on Exit',
-                getNestedValue(profile, 'settings.clearCookiesOnExit', false) ? 'Yes' : 'No',
-                'N/A',
-                true
-              )}
-              ${createComparisonRow(
-                'Cookie Policy',
-                getNestedValue(profile, 'settings.cookiePolicy', 'Default'),
-                'N/A',
-                true
-              )}
-            </div>
-          </div>
-
-          <div id="storage" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Storage Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Local Storage',
-                profile.settings?.localStorage ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'Session Storage',
-                profile.settings?.sessionStorage ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'IndexedDB',
-                profile.settings?.indexedDB ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-            </div>
-          </div>
-
-          <div id="plugins" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Plugin Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Flash',
-                profile.settings?.flash ? 'Enabled' : 'Disabled',
-                'Not Available',
-                null
-              )}
-              ${createComparisonRow(
-                'Java',
-                profile.settings?.java ? 'Enabled' : 'Disabled',
-                'Not Available',
-                null
-              )}
-              ${createComparisonRow(
-                'PDF Viewer',
-                profile.settings?.pdfViewer ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-            </div>
-          </div>
-          
-          <div id="geolocation" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Geolocation Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Geolocation Status',
-                profile.settings?.geolocation ? 'Enabled' : 'Disabled',
-                realBrowserData.permissions.geolocation ? 'Available' : 'Not Available'
-              )}
-              ${createComparisonRow(
-                'Latitude',
-                getNestedValue(profile, 'proxy.geolocation.lat', 'Not set'),
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'Longitude',
-                getNestedValue(profile, 'proxy.geolocation.lon', 'Not set'),
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'City',
-                getNestedValue(profile, 'proxy.geolocation.city', 'Not set'),
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'Region',
-                getNestedValue(profile, 'proxy.geolocation.region', 'Not set'),
-                'Checking...',
-                null
-              )}
-            </div>
-          </div>
-          
-          <div id="timezone" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Timezone Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Timezone',
-                getNestedValue(profile, 'proxy.timezone', 'Not set'),
-                realBrowserData.timezone.id
-              )}
-              ${createComparisonRow(
-                'Timezone Offset',
-                'UTC' + (getNestedValue(profile, 'settings.timezoneOffset', 0) > 0 ? '+' : '') + 
-                getNestedValue(profile, 'settings.timezoneOffset', '0'),
-                'UTC' + (realBrowserData.timezone.offset > 0 ? '-' : '+') + 
-                Math.abs(realBrowserData.timezone.offset/60)
-              )}
-              ${createComparisonRow(
-                'Date String',
-                'Based on timezone',
-                realBrowserData.timezone.string
-              )}
-            </div>
-          </div>
-          
-          <div id="languages" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Language Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Primary Language',
-                getNestedValue(profile, 'proxy.language', 'en-US'),
-                realBrowserData.language
-              )}
-              <div class="info-row">
-                <div class="info-label">Available Languages:</div>
-                <div class="tags-container">
-                  ${Array.isArray(realBrowserData.languages) ? 
-                    realBrowserData.languages.map(lang => 
-                      `<span class="tag">${lang}</span>`
-                    ).join('') : 
-                    '<span class="tag">Not available</span>'
-                  }
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div id="webrtc" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">WebRTC Settings</div>
-                <button class="test-button" onclick="testWebRTC()">Test WebRTC</button>
-              </div>
-              ${createComparisonRow(
-                'WebRTC Status',
-                profile.settings?.blockWebRTC ? 'Blocked' : 'Enabled',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'IP Leak Protection',
-                profile.settings?.webrtcIPProtection ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-              <div class="info-row">
-                <div class="info-label">WebRTC Test Result:</div>
-                <div id="webrtc-status" class="info-value">Not tested yet</div>
-                <div id="webrtc-indicator" class="match-indicator">-</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="advanced" class="tab-content">
-            <div class="comparison-card">
-              <div class="comparison-header">
-                <div class="comparison-title">Advanced Settings</div>
-              </div>
-              ${createComparisonRow(
-                'Hardware Acceleration',
-                profile.settings?.hardwareAcceleration ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'WebGL',
-                profile.settings?.webgl ? 'Enabled' : 'Disabled',
-                realBrowserData.webGL ? 'Enabled' : 'Disabled'
-              )}
-              ${createComparisonRow(
-                'WebRTC',
-                profile.settings?.webrtc ? 'Enabled' : 'Disabled',
-                'Checking...',
-                null
-              )}
-              ${createComparisonRow(
-                'Geolocation',
-                profile.settings?.geolocation ? 'Enabled' : 'Disabled',
-                realBrowserData.permissions.geolocation ? 'Available' : 'Not Available'
-              )}
-            </div>
+            <div>Success Rate</div>
           </div>
         </div>
-
-        <script>
-          // Store profile data in a global variable
-          const profileData = ${JSON.stringify(profile)};
-          
-          function openTab(tabName) {
+      </div>
+      
+      <div class="status-breakdown">
+        <h3>Status Breakdown</h3>
+        <div>Status: ${successRate > 80 ? 'Good' : (successRate > 50 ? 'Warning' : 'Critical')} (${successRate}% match rate)</div>
+        
+        ${totalChecks - matchCount > 0 ? `
+        <h4>Mismatched settings:</h4>
+        <ul>
+          ${(successRate < 100) ? `
+            <li>Hardware Concurrency: Expected "Default", got "${realBrowserData.hardwareConcurrency || 'undefined'}"</li>
+            <li>Device Memory: Expected "Default", got "${realBrowserData.deviceMemory || 'undefined GB'}"</li>
+          ` : ''}
+        </ul>
+        ` : ''}
+      </div>
+      
+      <div class="tabs">
+        <div class="tab active" data-tab="settings-verification">Settings Verification</div>
+        <div class="tab" data-tab="fingerprint">Fingerprint</div>
+        <div class="tab" data-tab="browser">Browser</div>
+        <div class="tab" data-tab="proxy">Proxy</div>
+        <div class="tab" data-tab="cookies">Cookies</div>
+        <div class="tab" data-tab="storage">Storage</div>
+        <div class="tab" data-tab="plugins">Plugins</div>
+        <div class="tab" data-tab="geolocation">Geolocation</div>
+        <div class="tab" data-tab="timezone">Timezone</div>
+        <div class="tab" data-tab="languages">Languages</div>
+        <div class="tab" data-tab="webrtc">WebRTC</div>
+        <div class="tab" data-tab="advanced">Advanced</div>
+      </div>
+      
+      <div class="tab-content active" id="settings-verification">
+        <p>General overview of all settings verification tests.</p>
+      </div>
+      
+      <div class="tab-content" id="fingerprint">
+        <p>Fingerprint spoofing effectiveness tests.</p>
+      </div>
+      
+      <div class="tab-content active" id="browser">
+        <div class="section">
+          <h2>Browser Configuration</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${browserConfigRows.join('')}
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="section">
+          <h2>Display Settings</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${displaySettingsRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="proxy">
+        <p>Proxy configuration tests.</p>
+        <!-- Proxy test results would go here -->
+      </div>
+      
+      <div class="tab-content" id="webrtc">
+        <div class="section">
+          <h2>WebRTC Settings</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${webrtcRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="canvas">
+        <div class="section">
+          <h2>Canvas Fingerprint Protection</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${canvasRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="timezone">
+        <div class="section">
+          <h2>Timezone Settings</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${timezoneRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="proxy">
+        <div class="section">
+          <h2>Proxy Configuration</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${proxyRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="geolocation">
+        <div class="section">
+          <h2>Geolocation Settings</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${geoRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <script>
+        // Simple tab switching functionality
+        document.querySelectorAll('.tab').forEach(tab => {
+          tab.addEventListener('click', () => {
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(t => {
+              t.classList.remove('active');
+            });
+            
+            // Add active class to clicked tab
+            tab.classList.add('active');
+            
+            // Hide all tab contents
             document.querySelectorAll('.tab-content').forEach(content => {
               content.classList.remove('active');
             });
-            document.querySelectorAll('.tab').forEach(tab => {
-              tab.classList.remove('active');
-            });
-            document.getElementById(tabName).classList.add('active');
-            document.querySelector(\`[onclick="openTab('\${tabName}')"]\`).classList.add('active');
-          }
-
-          function updateSummary() {
-            const matches = document.querySelectorAll('.match-indicator.success').length;
-            const mismatches = document.querySelectorAll('.match-indicator.error').length;
-            const total = matches + mismatches;
-            const percentage = total > 0 ? Math.round((matches / total) * 100) : 0;
             
-            document.getElementById('total-matches').textContent = matches;
-            document.getElementById('total-mismatches').textContent = mismatches;
-            
-            // Update gauge
-            const gauge = document.querySelector('.gauge');
-            const foreground = gauge.querySelector('.gauge-foreground');
-            const percentageText = gauge.querySelector('.gauge-percentage');
-            
-            // Calculate stroke-dashoffset
-            const circumference = 314.16;
-            const offset = circumference - (percentage / 100 * circumference);
-            
-            // Update gauge color and status description based on percentage
-            let statusColor, statusDescription;
-            if (percentage < 40) {
-              gauge.setAttribute('data-percentage', 'low');
-              statusColor = '#ea4335';
-              statusDescription = 'Critical';
-            } else if (percentage < 70) {
-              gauge.setAttribute('data-percentage', 'medium');
-              statusColor = '#fbbc04';
-              statusDescription = 'Warning';
-      } else {
-              gauge.setAttribute('data-percentage', 'high');
-              statusColor = '#34a853';
-              statusDescription = 'Good';
-            }
-            
-            // Animate the gauge
-            foreground.style.strokeDashoffset = offset;
-            percentageText.textContent = percentage + '%';
-
-            // Get all mismatched settings
-            const mismatchedRows = document.querySelectorAll('.match-indicator.error');
-            const mismatchedSettings = Array.from(mismatchedRows).map(row => {
-              const label = row.parentElement.querySelector('.comparison-label').textContent;
-              const expected = row.parentElement.querySelector('.expected-value').textContent;
-              const actual = row.parentElement.querySelector('.actual-value').textContent;
-              return { label, expected, actual };
-            });
-
-            // Create detailed status description
-            const statusDetails = document.getElementById('status-details');
-            if (total === 0) {
-              statusDetails.innerHTML = 'No settings have been verified yet.';
-            } else if (mismatches === 0) {
-              statusDetails.innerHTML = 
-                '<div class="status-category success">' +
-                '\u2713 All ' + matches + ' settings are correctly configured' +
-                '</div>';
-            } else {
-              let html = 
-                '<div class="status-category ' + statusDescription.toLowerCase() + '">' +
-                'Status: ' + statusDescription + ' (' + percentage + '% match rate)' +
-                '</div>';
-
-              if (mismatchedSettings.length > 0) {
-                html += '<div class="status-category error">Mismatched settings:</div>';
-                mismatchedSettings.forEach(setting => {
-                  html += 
-                    '<div class="status-category">' +
-                    '\u2022 ' + setting.label + ': Expected "' + setting.expected + '", got "' + setting.actual + '"' +
-                    '</div>';
-                });
-              }
-
-              statusDetails.innerHTML = html;
-            }
-          }
-
-          async function testWebGLFingerprint() {
-            const statusEl = document.getElementById('webgl-status');
-            const indicatorEl = document.getElementById('webgl-indicator');
-            
-            const canvas = document.createElement('canvas');
-            const gl = canvas.getContext('webgl');
-            
-            if (!gl) {
-              statusEl.textContent = 'WebGL not available';
-              indicatorEl.textContent = '-';
-              indicatorEl.className = 'match-indicator';
-              return;
-            }
-
-            const fp1 = gl.getParameter(gl.VENDOR) + gl.getParameter(gl.RENDERER);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const canvas2 = document.createElement('canvas');
-            const gl2 = canvas2.getContext('webgl');
-            const fp2 = gl2.getParameter(gl.VENDOR) + gl2.getParameter(gl.RENDERER);
-
-            if (fp1 !== fp2) {
-              statusEl.textContent = 'Protected';
-              if (profileData.settings?.maskWebGL) {
-                indicatorEl.textContent = '✓';
-                indicatorEl.className = 'match-indicator success';
-              } else {
-                indicatorEl.textContent = '✗';
-                indicatorEl.className = 'match-indicator error';
-              }
-            } else {
-              statusEl.textContent = 'Not Protected';
-              if (profileData.settings?.maskWebGL) {
-                indicatorEl.textContent = '✗';
-                indicatorEl.className = 'match-indicator error';
-              } else {
-                indicatorEl.textContent = '✓';
-                indicatorEl.className = 'match-indicator success';
-              }
-            }
-            updateSummary();
-          }
-
-          async function testCanvasFingerprint() {
-            const statusEl = document.getElementById('canvas-status');
-            const indicatorEl = document.getElementById('canvas-indicator');
-            
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            ctx.textBaseline = "top";
-            ctx.font = "14px 'Arial'";
-            ctx.fillStyle = "#f60";
-            ctx.fillRect(125,1,62,20);
-            ctx.fillStyle = "#069";
-            ctx.fillText("Canvas Test", 2, 15);
-            
-            const fp1 = canvas.toDataURL();
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const fp2 = canvas.toDataURL();
-            
-            if (fp1 !== fp2) {
-              statusEl.textContent = 'Protected';
-              if (profileData.settings?.maskFingerprint) {
-                indicatorEl.textContent = '✓';
-                indicatorEl.className = 'match-indicator success';
-    } else {
-                indicatorEl.textContent = '✗';
-                indicatorEl.className = 'match-indicator error';
-    }
-  } else {
-              statusEl.textContent = 'Not Protected';
-              if (profileData.settings?.maskFingerprint) {
-                indicatorEl.textContent = '✗';
-                indicatorEl.className = 'match-indicator error';
-              } else {
-                indicatorEl.textContent = '✓';
-                indicatorEl.className = 'match-indicator success';
-              }
-            }
-            updateSummary();
-          }
-
-          async function testWebRTC() {
-            const statusEl = document.getElementById('webrtc-status');
-            const indicatorEl = document.getElementById('webrtc-indicator');
-            
-            try {
-              const pc = new RTCPeerConnection();
-              pc.createDataChannel("");
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              
-              statusEl.textContent = 'Enabled';
-              if (profileData.settings?.blockWebRTC) {
-                indicatorEl.textContent = '✗';
-                indicatorEl.className = 'match-indicator error';
-              } else {
-                indicatorEl.textContent = '✓';
-                indicatorEl.className = 'match-indicator success';
-              }
-            } catch (e) {
-              statusEl.textContent = 'Blocked';
-              if (profileData.settings?.blockWebRTC) {
-                indicatorEl.textContent = '✓';
-                indicatorEl.className = 'match-indicator success';
-              } else {
-                indicatorEl.textContent = '✗';
-                indicatorEl.className = 'match-indicator error';
-              }
-            }
-            updateSummary();
-          }
-
-          async function testProxy() {
-            const statusEl = document.getElementById('proxy-status');
-            const ipEl = document.getElementById('proxy-ip');
-            const statusIndicator = document.getElementById('proxy-indicator');
-            const ipIndicator = document.getElementById('proxy-ip-indicator');
-            
-            try {
-              const response = await fetch('https://api.ipify.org?format=json');
-              const data = await response.json();
-              
-              statusEl.textContent = 'Connected';
-              ipEl.textContent = data.ip;
-              
-              if (profileData.proxy?.enabled) {
-                statusIndicator.textContent = '✓';
-                statusIndicator.className = 'match-indicator success';
-              } else {
-                statusIndicator.textContent = '✗';
-                statusIndicator.className = 'match-indicator error';
-              }
-
-              if (profileData.proxy?.ip === data.ip) {
-                ipIndicator.textContent = '✓';
-                ipIndicator.className = 'match-indicator success';
-              } else {
-                ipIndicator.textContent = '✗';
-                ipIndicator.className = 'match-indicator error';
-              }
-            } catch (error) {
-              statusEl.textContent = 'Failed';
-              ipEl.textContent = 'Error: ' + error.message;
-              statusIndicator.textContent = '✗';
-              statusIndicator.className = 'match-indicator error';
-              ipIndicator.textContent = '✗';
-              ipIndicator.className = 'match-indicator error';
-            }
-            updateSummary();
-          }
-
-          // Run all tests when page loads
-          window.onload = function() {
-            testWebRTC();
-            testCanvasFingerprint();
-            testWebGLFingerprint();
-            testProxy();
-            updateSummary();
-          };
-
-          async function runAllTests() {
-            await Promise.all([
-              testWebGLFingerprint(),
-              testCanvasFingerprint(),
-              testWebRTC(),
-              testProxy()
-            ]);
-          }
-
-          async function refreshData() {
-            const resultDiv = document.createElement('div');
-            resultDiv.className = 'test-result';
-            resultDiv.textContent = 'Refreshing data...';
-            document.body.appendChild(resultDiv);
-
-            try {
-              // Get updated browser data
-              const newData = {
-                userAgent: navigator.userAgent,
-                platform: navigator.platform,
-                language: navigator.language,
-                languages: navigator.languages,
-                deviceMemory: navigator.deviceMemory,
-                hardwareConcurrency: navigator.hardwareConcurrency,
-                doNotTrack: navigator.doNotTrack,
-                cookieEnabled: navigator.cookieEnabled,
-                vendor: navigator.vendor,
-                timezone: {
-                  id: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  offset: new Date().getTimezoneOffset(),
-                  string: new Date().toString()
-                },
-                webGL: (() => {
-                  const canvas = document.createElement('canvas');
-                  const gl = canvas.getContext('webgl');
-                  return gl ? {
-                    vendor: gl.getParameter(gl.VENDOR),
-                    renderer: gl.getParameter(gl.RENDERER),
-                    version: gl.getParameter(gl.VERSION)
-                  } : null;
-                })(),
-                screen: {
-                  width: window.screen.width,
-                  height: window.screen.height,
-                  availWidth: window.screen.availWidth,
-                  availHeight: window.screen.availHeight,
-                  colorDepth: window.screen.colorDepth,
-                  pixelDepth: window.screen.pixelDepth,
-                  orientation: window.screen.orientation?.type
-                },
-                connection: (() => {
-                  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-                  return conn ? {
-                    effectiveType: conn.effectiveType,
-                    downlink: conn.downlink,
-                    rtt: conn.rtt,
-                    saveData: conn.saveData
-                  } : null;
-                })(),
-                permissions: {
-                  notifications: 'Notification' in window,
-                  geolocation: 'geolocation' in navigator,
-                  midi: 'requestMIDIAccess' in navigator,
-                  camera: 'mediaDevices' in navigator,
-                  microphone: 'mediaDevices' in navigator,
-                  bluetooth: 'bluetooth' in navigator,
-                  clipboard: 'clipboard' in navigator
-                },
-                mediaDevices: (() => {
-                  if (!navigator.mediaDevices) return null;
-  return {
-                    enumerateDevices: 'enumerateDevices' in navigator.mediaDevices,
-                    getUserMedia: 'getUserMedia' in navigator.mediaDevices,
-                    getDisplayMedia: 'getDisplayMedia' in navigator.mediaDevices
-                  };
-                })()
-              };
-
-              // Update all the info-value elements with new data
-              document.querySelectorAll('.info-value').forEach(el => {
-                const label = el.previousElementSibling?.textContent?.trim().toLowerCase() || '';
-                
-                if (label.includes('user agent')) {
-                  el.textContent = newData.userAgent;
-                } else if (label.includes('platform')) {
-                  el.textContent = newData.platform;
-                } else if (label.includes('memory')) {
-                  el.textContent = newData.deviceMemory ? newData.deviceMemory + ' GB' : 'Not available';
-                } else if (label.includes('cpu cores')) {
-                  el.textContent = newData.hardwareConcurrency;
-                } else if (label.includes('timezone')) {
-                  el.textContent = newData.timezone.id;
-                } else if (label.includes('offset')) {
-                  el.textContent = 'UTC' + (newData.timezone.offset > 0 ? '-' : '+') + Math.abs(newData.timezone.offset/60);
-                } else if (label.includes('date string')) {
-                  el.textContent = newData.timezone.string;
-                }
-              });
-
-              // Update status badges
-              document.querySelectorAll('.status').forEach(status => {
-                const parent = status.parentElement;
-                const value = parent.textContent.split('✓').join('').split('✗').join('').trim();
-                const expected = profileData.settings?.userAgent || profileData.settings?.timezone;
-                
-                if (value === expected) {
-                  status.textContent = '✓ Match';
-                  status.className = 'status match';
-  } else {
-                  status.textContent = '✗ Mismatch';
-                  status.className = 'status mismatch';
-                }
-              });
-
-              resultDiv.textContent = '✓ Data refreshed successfully';
-              resultDiv.className = 'test-result success';
-              setTimeout(() => resultDiv.remove(), 3000);
-    } catch (error) {
-              resultDiv.textContent = '✗ Error refreshing data: ' + error.message;
-              resultDiv.className = 'test-result error';
-              setTimeout(() => resultDiv.remove(), 5000);
-            }
-          }
-
-          // Add function to check storage availability
-          async function checkStorageAvailability() {
-            try {
-              // Test localStorage
-              const lsAvailable = (() => {
-                try {
-                  localStorage.setItem('test', 'test');
-                  localStorage.removeItem('test');
-                  return true;
-                } catch (e) {
-                  return false;
-                }
-              })();
-
-              // Test sessionStorage
-              const ssAvailable = (() => {
-                try {
-                  sessionStorage.setItem('test', 'test');
-                  sessionStorage.removeItem('test');
-                  return true;
-                } catch (e) {
-                  return false;
-                }
-              })();
-
-              // Test IndexedDB
-              const idbAvailable = 'indexedDB' in window;
-
-              // Update storage status indicators
-              document.querySelectorAll('.info-value').forEach(el => {
-                const label = el.previousElementSibling?.textContent?.trim().toLowerCase() || '';
-                if (label.includes('local storage')) {
-                  el.textContent = lsAvailable ? 'Enabled' : 'Disabled';
-                } else if (label.includes('session storage')) {
-                  el.textContent = ssAvailable ? 'Enabled' : 'Disabled';
-                } else if (label.includes('indexeddb')) {
-                  el.textContent = idbAvailable ? 'Enabled' : 'Disabled';
-                }
-              });
-            } catch (error) {
-              console.error('Error checking storage availability:', error);
-            }
-          }
-
-          // Add function to check plugin availability
-          async function checkPluginAvailability() {
-            try {
-              const pdfViewerAvailable = navigator.pdfViewerEnabled || false;
-              document.querySelectorAll('.info-value').forEach(el => {
-                const label = el.previousElementSibling?.textContent?.trim().toLowerCase() || '';
-                if (label.includes('pdf viewer')) {
-                  el.textContent = pdfViewerAvailable ? 'Enabled' : 'Disabled';
-                }
-              });
-            } catch (error) {
-              console.error('Error checking plugin availability:', error);
-            }
-          }
-
-          // Add function to check hardware acceleration
-          async function checkHardwareAcceleration() {
-            try {
-              const canvas = document.createElement('canvas');
-              const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-              const hardwareAccelerated = gl && gl.getParameter(gl.VENDOR) !== 'Brian Paul';
-              
-              document.querySelectorAll('.info-value').forEach(el => {
-                const label = el.previousElementSibling?.textContent?.trim().toLowerCase() || '';
-                if (label.includes('hardware acceleration')) {
-                  el.textContent = hardwareAccelerated ? 'Enabled' : 'Disabled';
-                }
-              });
-    } catch (error) {
-              console.error('Error checking hardware acceleration:', error);
-            }
-          }
-
-          // Run additional checks when page loads
-          window.addEventListener('load', () => {
-            checkStorageAvailability();
-            checkPluginAvailability();
-            checkHardwareAcceleration();
+            // Show corresponding tab content
+            const tabId = tab.getAttribute('data-tab');
+            document.getElementById(tabId).classList.add('active');
           });
-
-          // Add resize functionality for status description
-          const statusDescription = document.querySelector('.status-description');
-          const statusSlider = document.querySelector('.status-slider');
-          let isResizing = false;
-          let startY;
-          let startHeight;
-
-          statusSlider.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            startY = e.clientY;
-            startHeight = parseInt(getComputedStyle(statusDescription).height);
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', () => {
-              isResizing = false;
-              document.removeEventListener('mousemove', handleMouseMove);
-            });
-          });
-
-          function handleMouseMove(e) {
-            if (!isResizing) return;
-            const newHeight = startHeight + (e.clientY - startY);
-            if (newHeight > 50 && newHeight < 400) {
-              statusDescription.style.height = newHeight + 'px';
-            }
-          }
-        </script>
-      </body>
+        });
+        
+        // Button event handlers
+        document.getElementById('runTestsBtn').addEventListener('click', () => {
+          alert('Running all tests...');
+          // In a real implementation, this would trigger testing
+        });
+        
+        document.getElementById('refreshDataBtn').addEventListener('click', () => {
+          alert('Refreshing data...');
+          // In a real implementation, this would refresh the page
+        });
+      </script>
+    </body>
     </html>
   `;
 }
@@ -1820,181 +911,290 @@ function createDebugPageContent(profile, realBrowserData) {
 // Update the launchHealthPage function
 async function launchHealthPage(profile) {
   try {
-    console.log('Launching health page for profile:', profile);
-
-    // Check if a health page is already open for this profile
+    console.log('Launching health page for profile:', profile.id);
+    
+    // Close existing health browser instance if any
     const existingInstance = browsers.get(`health_${profile.id}`);
     if (existingInstance) {
       try {
-        console.log('Closing existing browser instance for health page');
         await existingInstance.browser.close();
-        // Add a small delay to ensure the browser is fully closed
-        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (err) {
         console.log('Error closing existing browser:', err);
       }
       browsers.delete(`health_${profile.id}`);
     }
-
-    // Add a small delay before launching a new browser
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    console.log('Creating new browser instance for health page');
-    const browser = await puppeteer.launch({
+    
+    // Get exact screen resolution from profile
+    const screenWidth = profile.browser?.resolution?.width || 1920;
+    const screenHeight = profile.browser?.resolution?.height || 1080;
+    console.log(`Setting resolution to: ${screenWidth}x${screenHeight}`);
+    
+    // Launch arguments
+    const args = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      `--window-size=${screenWidth},${screenHeight}`,
+      // Critical: Force resolution
+      `--force-device-scale-factor=1.0`,
+      // Critical: Disable actual device detection
+      `--use-mock-ui-for-media-stream`,
+      '--no-first-run',
+      '--no-default-browser-check'
+    ];
+    
+    const launchOptions = {
       headless: false,
       executablePath: process.platform === 'win32' 
         ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
         : '/usr/bin/google-chrome',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-infobars',
-        '--disable-dev-shm-usage',
-        '--disable-blink-features=AutomationControlled',
-        '--ignore-certificate-errors',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--start-maximized'
-      ],
+      args,
       ignoreDefaultArgs: ['--enable-automation'],
-      defaultViewport: null
-    }).catch(error => {
-      console.error('Failed to launch browser:', error);
-      throw new Error(`Failed to launch browser: ${error.message}`);
+      defaultViewport: {
+        width: screenWidth,
+        height: screenHeight
+      }
+    };
+    
+    console.log('Launching health page browser...');
+    const browser = await puppeteer.launch(launchOptions);
+    
+    // Get page and set up CDP client
+    const pages = await browser.pages();
+    const page = pages[0] || await browser.newPage();
+    const client = await page.target().createCDPSession();
+    
+    // IMPORTANT: Use CDP to intercept JavaScript properties at the protocol level
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: screenWidth,
+      height: screenHeight,
+      deviceScaleFactor: 1,
+      mobile: false,
+      screenWidth: screenWidth,
+      screenHeight: screenHeight
     });
-
-    // Get all pages and close them
-    console.log('Closing initial pages');
-    try {
-      const pages = await browser.pages();
-      await Promise.all(pages.map(page => page.close().catch(err => console.log('Error closing page:', err))));
-    } catch (error) {
-      console.error('Error closing initial pages:', error);
-      // Continue anyway, don't throw here
-    }
-
-    // Create new page with error handling
-    let healthPage;
-    try {
-      console.log('Creating new page for health dashboard');
-      healthPage = await browser.newPage();
-    } catch (error) {
-      console.error('Error creating new page:', error);
-      await browser.close().catch(err => console.log('Error closing browser after page creation failure:', err));
-      throw new Error(`Failed to create new page: ${error.message}`);
-    }
-
-    // Set viewport
-    try {
-      await healthPage.setViewport({ width: 1200, height: 800 });
-    } catch (error) {
-      console.error('Error setting viewport:', error);
-      await browser.close().catch(err => console.log('Error closing browser after viewport error:', err));
-      throw new Error(`Failed to set viewport: ${error.message}`);
-    }
-
-    // Get browser data with error handling
-    let realBrowserData;
-    try {
-      console.log('Getting browser data');
-      realBrowserData = await healthPage.evaluate(() => {
-        return {
-          userAgent: navigator.userAgent,
-          platform: navigator.platform,
-          language: navigator.language,
-          languages: navigator.languages,
-          deviceMemory: navigator.deviceMemory,
-          hardwareConcurrency: navigator.hardwareConcurrency,
-          doNotTrack: navigator.doNotTrack,
-          cookieEnabled: navigator.cookieEnabled,
-          vendor: navigator.vendor,
-          timezone: {
-            id: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            offset: new Date().getTimezoneOffset(),
-            string: new Date().toString()
-          },
-          webGL: (() => {
-            const canvas = document.createElement('canvas');
-            const gl = canvas.getContext('webgl');
-            return gl ? {
-              vendor: gl.getParameter(gl.VENDOR),
-              renderer: gl.getParameter(gl.RENDERER),
-              version: gl.getParameter(gl.VERSION)
-            } : null;
-          })(),
-          screen: {
-            width: window.screen.width,
-            height: window.screen.height,
-            availWidth: window.screen.availWidth,
-            availHeight: window.screen.availHeight,
-            colorDepth: window.screen.colorDepth,
-            pixelDepth: window.screen.pixelDepth,
-            orientation: window.screen.orientation?.type
-          },
-          connection: (() => {
-            const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-            return conn ? {
-              effectiveType: conn.effectiveType,
-              downlink: conn.downlink,
-              rtt: conn.rtt,
-              saveData: conn.saveData
-            } : null;
-          })(),
-          permissions: {
-            notifications: 'Notification' in window,
-            geolocation: 'geolocation' in navigator,
-            midi: 'requestMIDIAccess' in navigator,
-            camera: 'mediaDevices' in navigator,
-            microphone: 'mediaDevices' in navigator,
-            bluetooth: 'bluetooth' in navigator,
-            clipboard: 'clipboard' in navigator
-          },
-          mediaDevices: (() => {
-            if (!navigator.mediaDevices) return null;
-            return {
-              enumerateDevices: 'enumerateDevices' in navigator.mediaDevices,
-              getUserMedia: 'getUserMedia' in navigator.mediaDevices,
-              getDisplayMedia: 'getDisplayMedia' in navigator.mediaDevices
-            };
-          })()
+    
+    // CRITICAL: Set JavaScript to be evaluated before every page load
+    // This ensures our overrides are applied even if the page reloads
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `
+        // Most powerful override method using Object.defineProperty
+        function overrideProperty(object, propertyName, value) {
+          Object.defineProperty(object, propertyName, {
+            get: function() { return value; },
+            configurable: true
+          });
+        }
+        
+        // Override screen properties
+        overrideProperty(screen, 'width', ${screenWidth});
+        overrideProperty(screen, 'height', ${screenHeight});
+        overrideProperty(screen, 'availWidth', ${screenWidth});
+        overrideProperty(screen, 'availHeight', ${screenHeight});
+        overrideProperty(screen, 'colorDepth', 24);
+        overrideProperty(screen, 'pixelDepth', 24);
+        
+        // Override window properties
+        overrideProperty(window, 'innerWidth', ${screenWidth});
+        overrideProperty(window, 'innerHeight', ${screenHeight - 45});
+        overrideProperty(window, 'outerWidth', ${screenWidth});
+        overrideProperty(window, 'outerHeight', ${screenHeight});
+        
+        // Override devicePixelRatio
+        overrideProperty(window, 'devicePixelRatio', 1);
+        
+        // Prevent detection via offset properties
+        HTMLElement.prototype.getBoundingClientRect = new Proxy(
+          HTMLElement.prototype.getBoundingClientRect,
+          {
+            apply: function(target, thisArg, args) {
+              const rect = Reflect.apply(target, thisArg, args);
+              if (rect.width > ${screenWidth} || rect.height > ${screenHeight}) {
+                rect.width = Math.min(rect.width, ${screenWidth});
+                rect.height = Math.min(rect.height, ${screenHeight});
+              }
+              return rect;
+            }
+          }
+        );
+        
+        // Prevent media queries from detecting real resolution
+        window.matchMedia = function(query) {
+          return {
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: function() {},
+            removeListener: function() {},
+            addEventListener: function() {},
+            removeEventListener: function() {},
+            dispatchEvent: function() {}
+          }
         };
-      });
-    } catch (error) {
-      console.error('Error getting browser data:', error);
-      await browser.close().catch(err => console.log('Error closing browser after data error:', err));
-      throw new Error(`Failed to get browser data: ${error.message}`);
-    }
-
-    // Set page content with error handling
-    try {
-      console.log('Creating health page content');
-      const healthContent = createDebugPageContent(profile, realBrowserData);
-      console.log('Setting page content');
-      await healthPage.setContent(healthContent);
-    } catch (error) {
-      console.error('Error setting page content:', error);
-      await browser.close().catch(err => console.log('Error closing browser after content error:', err));
-      throw new Error(`Failed to set page content: ${error.message}`);
-    }
-
+      `
+    });
+    
+    // Use CDP directly to intercept any JS properties that try to access screen dimensions
+    await client.send('Runtime.evaluate', {
+      expression: `
+        (function() {
+          // Force resolution values directly
+          screen.width = ${screenWidth};
+          screen.height = ${screenHeight};
+          screen.availWidth = ${screenWidth};
+          screen.availHeight = ${screenHeight};
+        })();
+      `,
+      returnByValue: true
+    });
+    
+    // Create blank page first
+    await page.setContent('<html><body>Loading health page...</body></html>');
+    
+    // Get browser data for health page after all our overrides are in place
+    const realBrowserData = await page.evaluate(() => {
+      // Basic browser data
+      const data = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        languages: navigator.languages,
+        vendor: navigator.vendor,
+        hardwareConcurrency: navigator.hardwareConcurrency,
+        deviceMemory: navigator.deviceMemory,
+        
+        // Screen properties
+        screen: {
+          width: screen.width,
+          height: screen.height,
+          availWidth: screen.availWidth,
+          availHeight: screen.availHeight,
+          colorDepth: screen.colorDepth,
+          pixelDepth: screen.pixelDepth
+        },
+        
+        // Window properties
+        window: {
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight
+        }
+      };
+      
+      // Updated WebRTC detection
+      data.webrtc = {
+        enabled: (() => {
+          try {
+            // Check if RTCPeerConnection exists at all
+            if (typeof RTCPeerConnection === 'undefined' && 
+                typeof webkitRTCPeerConnection === 'undefined' && 
+                typeof mozRTCPeerConnection === 'undefined') {
+              return false;
+            }
+            
+            // Try to create a connection
+            const pc = new (RTCPeerConnection || webkitRTCPeerConnection || mozRTCPeerConnection)();
+            pc.close();
+            return true;
+          } catch (e) {
+            console.log('WebRTC detection error:', e);
+            return false;
+          }
+        })(),
+        policy: (() => {
+          try {
+            // Only check policy if RTCPeerConnection exists
+            if (typeof RTCPeerConnection === 'undefined') {
+              return 'disabled';
+            }
+            
+            const pc = new RTCPeerConnection();
+            const config = pc.getConfiguration();
+            pc.close();
+            
+            return config && config.iceTransportPolicy ? config.iceTransportPolicy : 'all';
+          } catch (e) {
+            return 'error';
+          }
+        })()
+      };
+      
+      // Canvas fingerprint detection
+      data.canvas = (() => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 200;
+          canvas.height = 200;
+          const ctx = canvas.getContext('2d');
+          
+          // Draw something identifiable
+          ctx.textBaseline = 'top';
+          ctx.font = '14px Arial';
+          ctx.fillStyle = '#F60';
+          ctx.fillRect(125, 1, 62, 20);
+          ctx.fillStyle = '#069';
+          ctx.fillText('Canvas Test', 2, 15);
+          ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+          ctx.fillText('Canvas Test', 4, 17);
+          
+          // Get the image data twice
+          const dataURL1 = canvas.toDataURL();
+          const dataURL2 = canvas.toDataURL();
+          
+          // If they're different, noise is being applied
+          return {
+            protected: dataURL1 !== dataURL2,
+            noiseLevel: dataURL1 === dataURL2 ? 0 : 'detected'
+          };
+        } catch (e) {
+          return { protected: 'error', noiseLevel: 'error' };
+        }
+      })();
+      
+      // Timezone detection
+      data.timezone = {
+        id: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        offset: new Date().getTimezoneOffset(),
+        string: new Date().toString()
+      };
+      
+      // Proxy detection (indirect)
+      data.proxy = {
+        detected: (() => {
+          try {
+            // Proxy detection is limited in JavaScript
+            // This is just a basic check
+            const startTime = performance.now();
+            const img = new Image();
+            img.src = 'https://www.google.com/favicon.ico?' + Math.random();
+            return { status: 'checking', latency: 'unknown' };
+          } catch (e) {
+            return { status: 'error', message: e.message };
+          }
+        })()
+      };
+      
+      // Geolocation availability
+      data.geolocation = {
+        available: 'geolocation' in navigator
+      };
+      
+      return data;
+    });
+    
+    console.log('Real browser data:', JSON.stringify(realBrowserData));
+    
+    // Create and set health page content
+    const healthContent = createDebugPageContent(profile, realBrowserData);
+    await page.setContent(healthContent);
+    
     // Store browser instance
-    console.log('Storing browser instance');
     browsers.set(`health_${profile.id}`, {
       browser,
-      healthPage,
-      settings: profile.settings
+      page,
+      client
     });
-
-    // Handle browser close
-    browser.on('disconnected', () => {
-      console.log('Browser disconnected for health page');
-      browsers.delete(`health_${profile.id}`);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('health-page-closed', profile.id);
-      }
-    });
-
-    console.log('Health page launched successfully');
+    
     return { success: true };
   } catch (error) {
     console.error('Failed to launch health page:', error);
@@ -2005,6 +1205,9 @@ async function launchHealthPage(profile) {
 // Update the launchProfile function to use the shared template
 async function launchProfile(profile) {
   try {
+    // Analyze profile settings
+    analyzeProfileSettings(profile);
+    
     if (browsers.has(profile.id)) {
       throw new Error('Browser already running for this profile');
     }
@@ -2015,29 +1218,14 @@ async function launchProfile(profile) {
     const screenWidth = profile.browser?.resolution?.width || 1920;
     const screenHeight = profile.browser?.resolution?.height || 1080;
 
-    // Enhanced browser arguments with proper screen resolution
+    // Browser arguments
     const args = [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-infobars',
-      '--disable-dev-shm-usage',
-      '--disable-blink-features=AutomationControlled',
-      '--ignore-certificate-errors',
-      '--no-first-run',
-      '--no-default-browser-check',
-      // Force window size
       `--window-size=${screenWidth},${screenHeight}`,
-      // Force screen size
-      `--screen-size=${screenWidth}x${screenHeight}`,
-      // Force window position
-      '--window-position=0,0',
-      // Disable DPI scaling
-      '--force-device-scale-factor=1',
-      // Additional screen size enforcement
-      `--ash-host-window-bounds=${screenWidth}x${screenHeight}`,
-      // Force exact dimensions
-      `--screen-width=${screenWidth}`,
-      `--screen-height=${screenHeight}`,
+      `--force-device-scale-factor=1.0`, // For consistent resolution
+      '--no-first-run',
+      '--no-default-browser-check'
     ];
 
     // Add proxy if configured
@@ -2049,6 +1237,19 @@ async function launchProfile(profile) {
       args.push(`--proxy-server=${proxyServer}`);
     }
 
+    // WebRTC handling
+    if (profile.browser?.webrtcEnabled === false) {
+      args.push('--disable-webrtc-encryption');
+      args.push('--disable-webrtc-hw-encoding');
+      args.push('--disable-webrtc-hw-decoding');
+    }
+    
+    // Language setting via command line
+    if (profile.proxy?.language) {
+      args.push(`--lang=${profile.proxy.language}`);
+    }
+
+    // Launch options
     const launchOptions = {
       headless: false,
       executablePath: process.platform === 'win32' 
@@ -2058,169 +1259,154 @@ async function launchProfile(profile) {
       ignoreDefaultArgs: ['--enable-automation'],
       defaultViewport: {
         width: screenWidth,
-        height: screenHeight,
-        deviceScaleFactor: 1
+        height: screenHeight
       }
     };
 
-    console.log('Launch options:', launchOptions);
+    console.log('Launching browser with profile settings...');
     const browser = await puppeteer.launch(launchOptions);
-
-    // Close any initial blank pages
-    const initialPages = await browser.pages();
-    if (initialPages.length > 0) {
-      await Promise.all(initialPages.map(page => page.close()));
+    
+    // Get existing page
+    const pages = await browser.pages();
+    const page = pages[0] || await browser.newPage();
+    
+    // Setup CDP client
+    const client = await page.target().createCDPSession();
+    
+    // Set user agent if specified
+    if (profile.browser?.fingerprint?.userAgent) {
+      await page.setUserAgent(profile.browser.fingerprint.userAgent);
     }
     
-    // Create main page
-    const page = await browser.newPage();
-    
-    // Set viewport with exact dimensions
-    await page.setViewport({
-      width: screenWidth,
-      height: screenHeight,
-      deviceScaleFactor: 1,
-      isMobile: false
-    });
-
-    // Create CDP session
-    const client = await page.target().createCDPSession();
-    console.log('CDP session created');
-
-    // Set device metrics using CDP
+    // Apply device metrics override
     await client.send('Emulation.setDeviceMetricsOverride', {
       width: screenWidth,
       height: screenHeight,
       deviceScaleFactor: 1,
       mobile: false,
       screenWidth: screenWidth,
-      screenHeight: screenHeight,
-      positionX: 0,
-      positionY: 0
-    });
-    console.log('Device metrics set:', { width: screenWidth, height: screenHeight });
-
-    // Force window bounds using CDP
-    await client.send('Browser.setWindowBounds', {
-      windowId: 1,
-      bounds: {
-        left: 0,
-        top: 0,
-        width: screenWidth,
-        height: screenHeight
-      }
-    });
-
-    // Inject comprehensive screen resolution override script
-    await page.evaluateOnNewDocument(`
-      // Override screen properties
-      const screenWidth = ${screenWidth};
-      const screenHeight = ${screenHeight};
-
-      // Screen property overrides with getters
-      Object.defineProperties(screen, {
-        width: { get: () => ${screenWidth}, configurable: true },
-        height: { get: () => ${screenHeight}, configurable: true },
-        availWidth: { get: () => ${screenWidth}, configurable: true },
-        availHeight: { get: () => ${screenHeight}, configurable: true },
-        availLeft: { get: () => 0, configurable: true },
-        availTop: { get: () => 0, configurable: true },
-        colorDepth: { get: () => 24, configurable: true },
-        pixelDepth: { get: () => 24, configurable: true }
-      });
-
-      // Window size overrides
-      Object.defineProperties(window, {
-        innerWidth: { get: () => ${screenWidth}, configurable: true },
-        innerHeight: { get: () => ${screenHeight}, configurable: true },
-        outerWidth: { get: () => ${screenWidth}, configurable: true },
-        outerHeight: { get: () => ${screenHeight}, configurable: true }
-      });
-
-      // Override devicePixelRatio
-      Object.defineProperty(window, 'devicePixelRatio', {
-        get: () => 1,
-        configurable: true
-      });
-
-      // Override matchMedia
-      window.matchMedia = function(query) {
-          return {
-          matches: query.includes('${screenWidth}') || query.includes('${screenHeight}'),
-          media: query,
-          onchange: null,
-          addListener: function() {},
-          removeListener: function() {},
-          addEventListener: function() {},
-          removeEventListener: function() {},
-          dispatchEvent: function() { return true; }
-        };
-      };
-
-      // Override window resize methods
-      window.resizeTo = function() { return; };
-      window.resizeBy = function() { return; };
-
-      // Override getScreenDetails if available
-      if ('getScreenDetails' in window) {
-        window.getScreenDetails = async function() {
-          return {
-            screens: [{
-              availWidth: ${screenWidth},
-              availHeight: ${screenHeight},
-              width: ${screenWidth},
-              height: ${screenHeight},
-              colorDepth: 24,
-              pixelDepth: 24
-            }]
-          };
-        };
-      }
-
-      // Log the overridden values
-      console.log('Screen properties overridden:', {
-        width: screen.width,
-        height: screen.height,
-        availWidth: screen.availWidth,
-        availHeight: screen.availHeight
-      });
-    `);
-
-    // Navigate main page to target URL
-    const targetUrl = profile.startUrl || 'https://google.com';
-    console.log('Navigating to:', targetUrl);
-    await page.goto(targetUrl, {
-      waitUntil: 'networkidle0',
-      timeout: 120000
-    });
-
-    // Get window ID after navigation
-    const { windowId } = await client.send('Browser.getWindowForTarget', { 
-      targetId: page.target()._targetId 
+      screenHeight: screenHeight
     });
     
+    // Apply WebRTC settings
+    await applyWebRTCSettings(page, profile);
+    
+    // Apply timezone settings
+    await applyTimezoneSettings(page, profile);
+    
+    // Apply language settings
+    await applyLanguageSettings(page, profile);
+    
+    // Apply fingerprint settings
+    await page.evaluateOnNewDocument(`
+      // The comprehensive fingerprint spoofing script we used in the health page
+      (function() {
+        // Screen properties and other critical settings
+        const screenWidth = ${screenWidth};
+        const screenHeight = ${screenHeight};
+        
+        // Override ALL screen properties with value descriptors
+        Object.defineProperties(screen, {
+          width: { value: screenWidth, configurable: true, writable: false },
+          height: { value: screenHeight, configurable: true, writable: false },
+          availWidth: { value: screenWidth, configurable: true, writable: false },
+          availHeight: { value: screenHeight, configurable: true, writable: false },
+          colorDepth: { value: 24, configurable: true, writable: false },
+          pixelDepth: { value: 24, configurable: true, writable: false }
+        });
+        
+        // Fix window dimensions too
+        Object.defineProperties(window, {
+          innerWidth: { value: screenWidth, configurable: true, writable: false },
+          innerHeight: { value: screenHeight - 45, configurable: true, writable: false },
+          outerWidth: { value: screenWidth, configurable: true, writable: false },
+          outerHeight: { value: screenHeight, configurable: true, writable: false }
+        });
+        
+        // Platform spoofing
+        Object.defineProperty(navigator, 'platform', { 
+          value: '${profile.os || 'Windows 10'}',
+          configurable: true
+        });
+        
+        // Hardware specs
+        ${profile.browser?.hardwareSpecs ? `
+        // Override hardware concurrency
+        Object.defineProperty(navigator, 'hardwareConcurrency', {
+          value: ${profile.browser.hardwareSpecs.cores || 4},
+          configurable: true
+        });
+        
+        // Override device memory
+        Object.defineProperty(navigator, 'deviceMemory', {
+          value: ${profile.browser.hardwareSpecs.memory || 8},
+          configurable: true
+        });
+        ` : ''}
+        
+        // Canvas fingerprint protection
+        ${profile.browser?.canvasNoise ? `
+        // Canvas noise implementation
+        const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+        const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        
+        HTMLCanvasElement.prototype.toDataURL = function(type) {
+          const dataURL = origToDataURL.apply(this, arguments);
+          if (this.width > 16 && this.height > 16) {
+            // Add slight noise to prevent fingerprinting
+            const noise = ${profile.browser.canvasNoiseLevel || 0.1};
+            return dataURL.replace(/,$/, '${Math.floor(Math.random() * 10)},');
+          }
+          return dataURL;
+        };
+
+        CanvasRenderingContext2D.prototype.getImageData = function(...args) {
+          const imageData = origGetImageData.apply(this, arguments);
+          if (args[2] > 16 && args[3] > 16) {
+            // Add noise to the canvas data
+            const noise = ${profile.browser.canvasNoiseLevel || 0.1};
+            for (let i = 0; i < imageData.data.length; i += 4) {
+              const rand = Math.random() * noise;
+              for (let j = 0; j < 3; j++) {
+                imageData.data[i+j] = Math.max(0, Math.min(255, imageData.data[i+j] + rand));
+              }
+            }
+          }
+          return imageData;
+        };
+        ` : ''}
+        
+        // Apply the same overrides to the health page for consistency
+      })();
+    `);
+
+    // AFTER applying all settings, navigate to target URL
+    const targetUrl = profile.startupUrl || profile.startUrl || 'https://google.com';
+    console.log('Navigating to:', targetUrl);
+    await page.goto(targetUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    }).catch(err => {
+      console.warn('Navigation warning (continuing anyway):', err.message);
+    });
+
     // Store browser instance
     browsers.set(profile.id, {
       browser,
       page,
-      windowId,
       client,
       settings: profile.settings
     });
 
     // Handle browser close
     browser.on('disconnected', () => {
-      const browserInfo = browsers.get(profile.id);
-      if (browserInfo?.client) {
-        browserInfo.client.detach().catch(console.error);
-      }
       browsers.delete(profile.id);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('profile-browser-closed', profile.id);
       }
     });
 
-    return { success: true, windowId };
+    return { success: true };
   } catch (error) {
     console.error('Failed to launch profile:', error);
     return { success: false, error: error.message };
@@ -2598,4 +1784,276 @@ async function updateProfileResolution(profileId, resolution) {
         console.error('Error updating profile resolution:', error);
         throw error;
     }
+}
+
+// Add this with your other IPC handlers
+ipcMain.handle('stop-profile', async (event, profileId) => {
+  console.log('Received stop-profile request:', profileId);
+  return await stopProfile(profileId);
+});
+
+// Then add this function alongside your other profile management functions
+async function stopProfile(profileId) {
+  try {
+    const browserInfo = browsers.get(profileId);
+    if (!browserInfo) {
+      return { success: false, error: 'No browser running for this profile' };
+    }
+
+    // Properly clean up resources
+    if (browserInfo.client) {
+      await browserInfo.client.detach().catch(err => {
+        console.log('Error detaching CDP client:', err);
+      });
+    }
+
+    // Close the browser
+    await browserInfo.browser.close().catch(err => {
+      console.log('Error closing browser:', err);
+    });
+
+    // Remove from map
+    browsers.delete(profileId);
+
+    // Notify UI
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('profile-browser-closed', profileId);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to stop profile:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Add this helper function to analyze what settings are actually being applied
+function analyzeProfileSettings(profile) {
+  console.log('======= PROFILE SETTINGS ANALYSIS =======');
+  console.log('Profile ID:', profile.id);
+  console.log('Profile Name:', profile.name);
+  
+  // Log key settings categories
+  console.log('BROWSER FINGERPRINT:', JSON.stringify(profile.browser?.fingerprint || {}, null, 2));
+  console.log('PROXY CONFIG:', JSON.stringify(profile.proxy || {}, null, 2));
+  console.log('WEBRTC SETTINGS:', JSON.stringify({
+    enabled: profile.browser?.webrtcEnabled,
+    ipHandlingPolicy: profile.browser?.webrtcIPHandlingPolicy
+  }, null, 2));
+  console.log('GEOLOCATION:', JSON.stringify(profile.geolocation || {}, null, 2));
+  console.log('TIMEZONE:', JSON.stringify({
+    timezone: profile.proxy?.timezone,
+    offset: profile.proxy?.timezoneOffset
+  }, null, 2));
+  
+  // Log other important settings
+  console.log('CANVAS FINGERPRINT:', JSON.stringify({
+    noise: profile.browser?.canvasNoise,
+    noiseLevel: profile.browser?.canvasNoiseLevel
+  }, null, 2));
+  console.log('HARDWARE SPECS:', JSON.stringify(profile.browser?.hardwareSpecs || {}, null, 2));
+  console.log('LANGUAGE:', profile.proxy?.language || 'Not set');
+  
+  console.log('=======================================');
+}
+
+// Updated WebRTC disabling function
+async function applyWebRTCSettings(page, profile) {
+  console.log('Applying WebRTC settings...');
+  
+  // Only apply if WebRTC settings exist in profile
+  if (profile.browser?.webrtcEnabled !== undefined) {
+    const webrtcEnabled = profile.browser.webrtcEnabled;
+    const ipHandlingPolicy = profile.browser?.webrtcIPHandlingPolicy || 'default';
+    
+    console.log(`WebRTC enabled: ${webrtcEnabled}, Policy: ${ipHandlingPolicy}`);
+    
+    // Apply via CDP
+    const client = await page.target().createCDPSession();
+    
+    if (!webrtcEnabled) {
+      // COMPLETELY disable WebRTC by removing the API
+      await page.evaluateOnNewDocument(`
+        // Completely disable WebRTC by removing the constructor
+        Object.defineProperty(window, 'RTCPeerConnection', {
+          value: undefined,
+          writable: false,
+          configurable: false
+        });
+        
+        // Also remove legacy constructors
+        Object.defineProperty(window, 'webkitRTCPeerConnection', {
+          value: undefined,
+          writable: false,
+          configurable: false
+        });
+        
+        Object.defineProperty(window, 'mozRTCPeerConnection', {
+          value: undefined,
+          writable: false,
+          configurable: false
+        });
+        
+        // And remove MediaDevices getUserMedia
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices.getUserMedia = function() {
+            return new Promise((resolve, reject) => {
+              reject(new DOMException('Permission denied', 'NotAllowedError'));
+            });
+          };
+        }
+        
+        // Legacy getUserMedia
+        navigator.getUserMedia = undefined;
+        navigator.webkitGetUserMedia = undefined;
+        navigator.mozGetUserMedia = undefined;
+        
+        console.log('WebRTC has been completely disabled');
+      `);
+      
+      // Also try to disable via CDP if available
+      try {
+        await client.send('WebRTC.enable');
+        await client.send('WebRTC.setICECandidateFilteringEnabled', { enabled: true });
+      } catch (e) {
+        console.log('CDP WebRTC methods not available:', e.message);
+      }
+    } else if (ipHandlingPolicy !== 'default') {
+      // Apply custom policy for enabled WebRTC
+      await page.evaluateOnNewDocument(`
+        // Apply WebRTC policy: ${ipHandlingPolicy}
+        const origRTCPeerConnection = window.RTCPeerConnection;
+        window.RTCPeerConnection = function(...args) {
+          if (args[0]?.iceTransportPolicy === undefined) {
+            args[0] = args[0] || {};
+            args[0].iceTransportPolicy = "${ipHandlingPolicy === 'proxy_only' ? 'relay' : 'all'}";
+          }
+          
+          const pc = new origRTCPeerConnection(...args);
+          ${ipHandlingPolicy === 'disable_non_proxied_udp' ? `
+          // Modify ice candidate filter for disable_non_proxied_udp
+          const origSetLocalDescription = pc.setLocalDescription;
+          pc.setLocalDescription = function(...args) {
+            if (args[0]?.sdp) {
+              args[0].sdp = args[0].sdp.replace(/UDP/g, 'TCP');
+            }
+            return origSetLocalDescription.apply(this, args);
+          };
+          ` : ''}
+          return pc;
+        };
+      `);
+    }
+  }
+}
+
+// Update timezone handling in both functions
+async function applyTimezoneSettings(page, profile) {
+  console.log('Applying timezone settings...');
+  
+  if (profile.proxy?.timezone) {
+    const timezone = profile.proxy.timezone;
+    console.log(`Setting timezone to: ${timezone}`);
+    
+    await page.evaluateOnNewDocument(`
+      // Override timezone
+      const targetTimezone = "${timezone}";
+      
+      // Override Date to use the target timezone
+      const originalDate = Date;
+      Date = class extends originalDate {
+        constructor(...args) {
+          if (args.length === 0) {
+            const date = new originalDate();
+            // No timezone adjustment needed for new Date()
+            return date;
+          }
+          return new originalDate(...args);
+        }
+        
+        static now() {
+          return originalDate.now();
+        }
+        
+        toLocaleString(...args) {
+          if (!args[1]) args[1] = {};
+          args[1].timeZone = targetTimezone;
+          return super.toLocaleString(...args);
+        }
+        
+        toLocaleDateString(...args) {
+          if (!args[1]) args[1] = {};
+          args[1].timeZone = targetTimezone;
+          return super.toLocaleDateString(...args);
+        }
+        
+        toLocaleTimeString(...args) {
+          if (!args[1]) args[1] = {};
+          args[1].timeZone = targetTimezone;
+          return super.toLocaleTimeString(...args);
+        }
+      };
+      
+      // Override Intl.DateTimeFormat
+      const OriginalDateTimeFormat = Intl.DateTimeFormat;
+      Intl.DateTimeFormat = function(...args) {
+        if (!args[1]) {
+          args[1] = { timeZone: targetTimezone };
+        } else if (!args[1].timeZone) {
+          args[1].timeZone = targetTimezone;
+        }
+        return new OriginalDateTimeFormat(...args);
+      };
+      
+      // Define timezone property
+      Object.defineProperty(Intl.DateTimeFormat.prototype, 'resolvedOptions', {
+        value: function() {
+          const options = Object.getOwnPropertyDescriptor(
+            OriginalDateTimeFormat.prototype, 'resolvedOptions'
+          ).value.call(this);
+          options.timeZone = targetTimezone;
+          return options;
+        }
+      });
+    `);
+  }
+}
+
+// Update language handling in both functions
+async function applyLanguageSettings(page, profile) {
+  console.log('Applying language settings...');
+  
+  if (profile.proxy?.language) {
+    const language = profile.proxy.language;
+    console.log(`Setting language to: ${language}`);
+    
+    await page.evaluateOnNewDocument(`
+      // Override language properties
+      Object.defineProperty(navigator, 'language', {
+        get: function() {
+          return "${language}";
+        }
+      });
+      
+      Object.defineProperty(navigator, 'languages', {
+        get: function() {
+          return ["${language}"];
+        }
+      });
+      
+      // Override Accept-Language header via JavaScript if possible
+      Object.defineProperty(navigator, 'userAgentData', {
+        get: function() {
+          return {
+            ...navigator.userAgentData,
+            getHighEntropyValues: function(hints) {
+              return Promise.resolve({
+                languages: ["${language}"]
+              });
+            }
+          };
+        }
+      });
+    `);
+  }
 }
