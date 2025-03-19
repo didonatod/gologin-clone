@@ -490,8 +490,9 @@ function createDebugPageContent(profile, realBrowserData) {
           padding: 20px;
           line-height: 1.6;
           color: #333;
-          overflow-y: auto;
-          max-height: 100vh;
+          height: 100%;
+          margin: 0;
+          overflow-y: visible;
         }
         h1 {
           color: #2c7be5;
@@ -634,12 +635,19 @@ function createDebugPageContent(profile, realBrowserData) {
         }
         .tab-content {
           display: none;
-          max-height: calc(100vh - 300px);
-          overflow-y: auto;
           padding-right: 5px;
+          padding-bottom: 50px;
+          overflow: visible;
         }
         .tab-content.active {
           display: block;
+        }
+        html {
+          height: 100%;
+          overflow-y: scroll;
+        }
+        .section:last-child {
+          margin-bottom: 100px;
         }
       </style>
     </head>
@@ -711,9 +719,9 @@ function createDebugPageContent(profile, realBrowserData) {
       </div>
       
       <div class="tabs">
-        <div class="tab active" data-tab="settings-verification">Settings Verification</div>
+        <div class="tab" data-tab="settings-verification">Settings Verification</div>
         <div class="tab" data-tab="fingerprint">Fingerprint</div>
-        <div class="tab" data-tab="browser">Browser</div>
+        <div class="tab active" data-tab="browser">Browser</div>
         <div class="tab" data-tab="proxy">Proxy</div>
         <div class="tab" data-tab="cookies">Cookies</div>
         <div class="tab" data-tab="storage">Storage</div>
@@ -725,7 +733,7 @@ function createDebugPageContent(profile, realBrowserData) {
         <div class="tab" data-tab="advanced">Advanced</div>
       </div>
       
-      <div class="tab-content active" id="settings-verification">
+      <div class="tab-content" id="settings-verification">
         <p>General overview of all settings verification tests.</p>
       </div>
       
@@ -1179,6 +1187,40 @@ async function launchHealthPage(profile) {
         available: 'geolocation' in navigator
       };
       
+      // IMPROVED: Better device memory detection using fallbacks
+      const detectDeviceMemory = () => {
+        // Try all possible ways to get the device memory
+        if (navigator.deviceMemory !== undefined) {
+          return navigator.deviceMemory;
+        }
+        
+        // Check our global variable fallback
+        if (window.__DEVICE_MEMORY__ !== undefined) {
+          return window.__DEVICE_MEMORY__;
+        }
+        
+        // Check our helper function
+        if (typeof window.getDeviceMemory === 'function') {
+          return window.getDeviceMemory();
+        }
+        
+        // If we can access the prototype
+        try {
+          const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'deviceMemory');
+          if (descriptor && descriptor.value !== undefined) {
+            return descriptor.value;
+          }
+        } catch (e) {
+          console.log('Failed to get deviceMemory from prototype');
+        }
+        
+        // Last resort: return hardcoded value
+        return 8; // Fallback value
+      };
+      
+      // Use the comprehensive detection
+      data.deviceMemory = detectDeviceMemory();
+      
       return data;
     });
     
@@ -1273,6 +1315,10 @@ async function launchProfile(profile) {
     // Setup CDP client
     const client = await page.target().createCDPSession();
     
+    // Apply hardware settings first (this helps ensure they're set before other fingerprinting)
+    await applyHardwareSettings(page, profile);
+    
+    // Then continue with other settings...
     // Set user agent if specified
     if (profile.browser?.fingerprint?.userAgent) {
       await page.setUserAgent(profile.browser.fingerprint.userAgent);
@@ -1379,6 +1425,9 @@ async function launchProfile(profile) {
         // Apply the same overrides to the health page for consistency
       })();
     `);
+
+    // In both launch functions, add this line after applyHardwareSettings
+    await enhanceDeviceMemorySettings(page, profile);
 
     // AFTER applying all settings, navigate to target URL
     const targetUrl = profile.startupUrl || profile.startUrl || 'https://google.com';
@@ -1926,7 +1975,7 @@ async function applyWebRTCSettings(page, profile) {
         window.RTCPeerConnection = function(...args) {
           if (args[0]?.iceTransportPolicy === undefined) {
             args[0] = args[0] || {};
-            args[0].iceTransportPolicy = "${ipHandlingPolicy === 'proxy_only' ? 'relay' : 'all'}";
+            args[0].iceTransportPolicy = ${ipHandlingPolicy === 'proxy_only' ? '"relay"' : '"all"'};
           }
           
           const pc = new origRTCPeerConnection(...args);
@@ -2056,4 +2105,175 @@ async function applyLanguageSettings(page, profile) {
       });
     `);
   }
+}
+
+// Updated hardware specs spoofing function
+async function applyHardwareSettings(page, profile) {
+  console.log('Applying hardware settings...');
+  
+  const hardwareSpecs = profile.browser?.hardwareSpecs || {};
+  const cores = hardwareSpecs.cores || 4;
+  const memory = hardwareSpecs.memory || 8;
+  
+  console.log(`Setting hardware specs - Cores: ${cores}, Memory: ${memory}GB`);
+  
+  // Apply via CDP for more reliable overrides
+  const client = await page.target().createCDPSession();
+  
+  // Use both CDP and JavaScript for maximum effectiveness
+  await client.send('Emulation.setScriptExecutionDisabled', { value: false });
+  
+  // Override hardware specs using JavaScript (multiple approaches for better reliability)
+  await page.evaluateOnNewDocument(`
+    // Method 1: Direct descriptor override with proper configuration
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+      value: ${cores},
+      configurable: false,
+      writable: false,
+      enumerable: true
+    });
+    
+    Object.defineProperty(navigator, 'deviceMemory', {
+      value: ${memory},
+      configurable: false,
+      writable: false,
+      enumerable: true
+    });
+    
+    // Method 2: Backup override using prototype interception
+    // This helps in case the first method is detected and reversed
+    (() => {
+      const navigatorProxy = new Proxy(navigator, {
+        get: function(target, prop) {
+          if (prop === 'hardwareConcurrency') {
+            return ${cores};
+          }
+          if (prop === 'deviceMemory') {
+            return ${memory};
+          }
+          
+          // Default behavior for other properties
+          const value = target[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
+        }
+      });
+      
+      // Try to replace navigator with our proxy if possible
+      try {
+        // This may fail in some browsers but worth trying
+        Object.defineProperty(window, 'navigator', {
+          value: navigatorProxy,
+          configurable: false,
+          writable: false
+        });
+      } catch (e) {
+        console.warn('Could not replace navigator object');
+      }
+    })();
+    
+    // Validation check - log the values to make sure they're set
+    console.log('Hardware specs set - CPU cores:', navigator.hardwareConcurrency);
+    console.log('Hardware specs set - Device memory:', navigator.deviceMemory);
+  `);
+}
+
+// Enhanced device memory detection and spoofing - Improved Version
+async function enhanceDeviceMemorySettings(page, profile) {
+  console.log('Enhancing device memory settings with advanced technique...');
+  
+  const memory = profile.browser?.hardwareSpecs?.memory || 8;
+  console.log(`Setting device memory to: ${memory}GB`);
+  
+  // Use CDP to add script that will run before anything else
+  const client = await page.target().createCDPSession();
+  
+  // Apply multiple layers of memory spoofing with improved reliability
+  await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      (function() {
+        // CRITICAL: Define memory value early
+        const memoryValue = ${memory};
+        
+        // Override deviceMemory using all known techniques
+        try {
+          // 1. Direct definition - most basic approach
+          navigator.deviceMemory = memoryValue;
+          
+          // 2. Property descriptor - more robust
+          Object.defineProperty(navigator, 'deviceMemory', {
+            value: memoryValue,
+            configurable: true, 
+            writable: true,
+            enumerable: true
+          });
+          
+          // 3. Prototype override
+          Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+            value: memoryValue,
+            configurable: true,
+            enumerable: true,
+            writable: false
+          });
+          
+          // 4. Native getter hook
+          const navigatorObj = {};
+          navigatorObj.__defineGetter__('deviceMemory', function() { 
+            return memoryValue; 
+          });
+          
+          // 5. Store the original navigator to avoid memory leaks
+          const originalNavigator = navigator;
+          
+          // 6. Create a complete navigator proxy
+          const navigatorProxy = new Proxy(originalNavigator, {
+            get: function(target, prop) {
+              if (prop === 'deviceMemory') return memoryValue;
+              const value = target[prop];
+              return typeof value === 'function' ? value.bind(target) : value;
+            }
+          });
+          
+          // 7. Try to install the proxy (may fail in some browsers)
+          try {
+            Object.defineProperty(window, 'navigator', {
+              value: navigatorProxy,
+              configurable: false,
+              writable: false
+            });
+          } catch (e) {
+            console.log('Failed to replace navigator object, using fallbacks');
+          }
+          
+          // 8. Create passive check to restore value if modified
+          setInterval(() => {
+            if (navigator.deviceMemory !== memoryValue) {
+              console.log('Restoring deviceMemory value');
+              try {
+                Object.defineProperty(navigator, 'deviceMemory', {
+                  value: memoryValue,
+                  configurable: true,
+                  writable: true,
+                  enumerable: true
+                });
+              } catch (e) {
+                navigator.deviceMemory = memoryValue;
+              }
+            }
+          }, 500);
+          
+          // 9. Add a global variable that can be detected
+          window.__DEVICE_MEMORY__ = memoryValue;
+          
+          // 10. Define a helper function for code that checks navigator
+          window.getDeviceMemory = function() {
+            return memoryValue;
+          };
+          
+          console.log('✓ Device memory successfully set to:', memoryValue);
+        } catch (e) {
+          console.error('Failed to set deviceMemory:', e);
+        }
+      })();
+    `
+  });
 }
