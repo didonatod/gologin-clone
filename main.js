@@ -340,18 +340,44 @@ function createDebugPageContent(profile, realBrowserData) {
   
   // Browser configuration comparisons
   totalChecks++;
-  const userAgentMatch = getNestedValue(profile, 'browser.fingerprint.userAgent', 'Default') === realBrowserData.userAgent;
-  browserConfigRows.push(createComparisonRow('User Agent', getNestedValue(profile, 'browser.fingerprint.userAgent', 'Default'), realBrowserData.userAgent, userAgentMatch));
+  const defaultUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
+  let expectedUserAgent = getNestedValue(profile, 'browser.fingerprint.userAgent', null);
+  // If no specific user agent is set, use the actual one from browser
+  if (!expectedUserAgent) {
+    expectedUserAgent = realBrowserData.userAgent;
+  }
+  const userAgentMatch = expectedUserAgent === realBrowserData.userAgent;
+  browserConfigRows.push(createComparisonRow('User Agent', 
+    expectedUserAgent, 
+    realBrowserData.userAgent, 
+    userAgentMatch));
   if (userAgentMatch) matchCount++;
   
   totalChecks++;
-  const languageMatch = getNestedValue(profile, 'proxy.language', 'Default') === realBrowserData.language;
-  browserConfigRows.push(createComparisonRow('Language', getNestedValue(profile, 'proxy.language', 'Default'), realBrowserData.language, languageMatch));
+  const defaultLanguage = 'en-US';
+  const expectedLanguage = getNestedValue(profile, 'proxy.language', defaultLanguage);
+  const languageMatch = expectedLanguage === realBrowserData.language;
+  browserConfigRows.push(createComparisonRow('Language', 
+    expectedLanguage, 
+    realBrowserData.language, 
+    languageMatch));
   if (languageMatch) matchCount++;
   
   totalChecks++;
-  const platformMatch = getNestedValue(profile, 'os', 'Windows 10') === realBrowserData.platform;
-  browserConfigRows.push(createComparisonRow('Platform', getNestedValue(profile, 'os', 'Windows 10'), realBrowserData.platform, platformMatch));
+  const platformMap = {
+    'Windows 10': 'Win32',
+    'Windows 11': 'Win32',
+    'Windows': 'Win32',
+    'macOS': 'MacIntel',
+    'Mac OS X': 'MacIntel',
+    'Linux': 'Linux x86_64',
+    'Android': 'Android',
+    'iOS': 'iPhone'
+  };
+  const expectedOS = getNestedValue(profile, 'os', 'Windows 10');
+  const expectedPlatform = platformMap[expectedOS] || expectedOS;
+  const platformMatch = expectedPlatform === realBrowserData.platform;
+  browserConfigRows.push(createComparisonRow('Platform', expectedOS, realBrowserData.platform, platformMatch));
   if (platformMatch) matchCount++;
   
   totalChecks++;
@@ -473,6 +499,56 @@ function createDebugPageContent(profile, realBrowserData) {
         'Configured', 
         true)); // Can't verify actual coordinates without permission
     }
+  }
+  
+  // Create comparison rows for each section
+  const fingerprintRows = [];
+  
+  // ADD THIS: Check for canvas fingerprinting protection
+  if (profile.browser?.canvasNoise !== undefined) {
+    totalChecks++;
+    const canvasMatch = (profile.browser.canvasNoise === true) === realBrowserData.canvas?.protected;
+    fingerprintRows.push(createComparisonRow('Canvas Protection', 
+      profile.browser.canvasNoise ? 'Enabled' : 'Disabled', 
+      realBrowserData.canvas?.protected ? 'Enabled' : 'Disabled', 
+      canvasMatch));
+    if (canvasMatch) matchCount++;
+  }
+  
+  // ADD THIS: Check for audio fingerprinting protection
+  if (profile.browser?.audioNoiseEnabled !== undefined) {
+    totalChecks++;
+    const audioProtected = realBrowserData.audio?.protected || false;
+    const audioMatch = (profile.browser.audioNoiseEnabled === true) === audioProtected;
+    fingerprintRows.push(createComparisonRow('Audio Protection', 
+      profile.browser.audioNoiseEnabled ? 'Enabled' : 'Disabled', 
+      audioProtected ? 'Enabled' : 'Disabled', 
+      audioMatch));
+    if (audioMatch) matchCount++;
+  }
+  
+  // ADD THIS: Check for font protection
+  if (profile.browser?.fontProtection !== undefined) {
+    totalChecks++;
+    const fontProtected = realBrowserData.fonts?.protected || false;
+    const fontMatch = (profile.browser.fontProtection === true) === fontProtected;
+    fingerprintRows.push(createComparisonRow('Font Protection', 
+      profile.browser.fontProtection ? 'Enabled' : 'Disabled', 
+      fontProtected ? 'Enabled' : 'Disabled', 
+      fontMatch));
+    if (fontMatch) matchCount++;
+  }
+  
+  // ADD THIS: Check for WebGL protection
+  if (profile.browser?.webglProtection !== undefined) {
+    totalChecks++;
+    const webglProtected = realBrowserData.webgl?.protected || false;
+    const webglMatch = (profile.browser.webglProtection === true) === webglProtected;
+    fingerprintRows.push(createComparisonRow('WebGL Protection', 
+      profile.browser.webglProtection ? 'Enabled' : 'Disabled', 
+      webglProtected ? 'Enabled' : 'Disabled', 
+      webglMatch));
+    if (webglMatch) matchCount++;
   }
   
   // Calculate success rate
@@ -738,7 +814,23 @@ function createDebugPageContent(profile, realBrowserData) {
       </div>
       
       <div class="tab-content" id="fingerprint">
-        <p>Fingerprint spoofing effectiveness tests.</p>
+        <div class="section">
+          <h2>Fingerprinting Protection</h2>
+          <p>Effectiveness of fingerprinting protection techniques.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Expected Value</th>
+                <th>Actual Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${fingerprintRows.join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
       
       <div class="tab-content active" id="browser">
@@ -916,6 +1008,58 @@ function createDebugPageContent(profile, realBrowserData) {
   `;
 }
 
+// Update createDebugPageContent to show Font and WebGL protection
+const originalCreateDebugPageContent = createDebugPageContent;
+createDebugPageContent = function(profile, realBrowserData) {
+  // Add font and WebGL detection to realBrowserData if not present
+  if (!realBrowserData.fonts) {
+    realBrowserData.fonts = { protected: false };
+  }
+  if (!realBrowserData.webgl) {
+    realBrowserData.webgl = { protected: false };
+  }
+  
+  // Call original function
+  const content = originalCreateDebugPageContent(profile, realBrowserData);
+  
+  // Find where the fingerprint rows end in the HTML
+  const fingerprintTableEndPos = content.indexOf('</tbody>', content.indexOf('<div class="tab-content" id="fingerprint"'));
+  
+  if (fingerprintTableEndPos !== -1) {
+    // Create rows for font and WebGL protection
+    const fontRow = `
+      <tr>
+        <td>Font Protection</td>
+        <td>Enabled</td>
+        <td>${realBrowserData.fonts.protected ? 'Enabled' : 'Disabled'}</td>
+        <td style="color: ${realBrowserData.fonts.protected ? 'green' : 'red'}; text-align: center; font-weight: bold;">
+          ${realBrowserData.fonts.protected ? '✓' : '✗'}
+        </td>
+      </tr>
+    `;
+    
+    const webglRow = `
+      <tr>
+        <td>WebGL Protection</td>
+        <td>Enabled</td>
+        <td>${realBrowserData.webgl.protected ? 'Enabled' : 'Disabled'}</td>
+        <td style="color: ${realBrowserData.webgl.protected ? 'green' : 'red'}; text-align: center; font-weight: bold;">
+          ${realBrowserData.webgl.protected ? '✓' : '✗'}
+        </td>
+      </tr>
+    `;
+    
+    // Insert the new rows before the end of the table
+    const modifiedContent = content.substring(0, fingerprintTableEndPos) + 
+                            fontRow + webglRow + 
+                            content.substring(fingerprintTableEndPos);
+    
+    return modifiedContent;
+  }
+  
+  return content;
+};
+
 // Update the launchHealthPage function
 async function launchHealthPage(profile) {
   try {
@@ -1065,7 +1209,7 @@ async function launchHealthPage(profile) {
         userAgent: navigator.userAgent,
         platform: navigator.platform,
         language: navigator.language,
-        languages: navigator.languages,
+        languages: Array.from(navigator.languages || []), // Ensure it's serializable
         vendor: navigator.vendor,
         hardwareConcurrency: navigator.hardwareConcurrency,
         deviceMemory: navigator.deviceMemory,
@@ -1130,32 +1274,37 @@ async function launchHealthPage(profile) {
       // Canvas fingerprint detection
       data.canvas = (() => {
         try {
-          const canvas = document.createElement('canvas');
-          canvas.width = 200;
-          canvas.height = 200;
-          const ctx = canvas.getContext('2d');
+          // Create two canvases and compare their output
+          const canvas1 = document.createElement('canvas');
+          const canvas2 = document.createElement('canvas');
+          canvas1.width = canvas2.width = 200;
+          canvas1.height = canvas2.height = 200;
           
-          // Draw something identifiable
-          ctx.textBaseline = 'top';
-          ctx.font = '14px Arial';
-          ctx.fillStyle = '#F60';
-          ctx.fillRect(125, 1, 62, 20);
-          ctx.fillStyle = '#069';
-          ctx.fillText('Canvas Test', 2, 15);
-          ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-          ctx.fillText('Canvas Test', 4, 17);
+          const ctx1 = canvas1.getContext('2d');
+          const ctx2 = canvas2.getContext('2d');
           
-          // Get the image data twice
-          const dataURL1 = canvas.toDataURL();
-          const dataURL2 = canvas.toDataURL();
+          // Draw the same content
+          const drawTest = (ctx) => {
+            ctx.fillStyle = "rgb(100,200,50)";
+            ctx.fillRect(0, 0, 200, 200);
+            ctx.fillStyle = "rgba(0,0,200,0.5)";
+            ctx.font = "30px Arial";
+            ctx.fillText("Canvas Test", 10, 50);
+          };
           
-          // If they're different, noise is being applied
+          drawTest(ctx1);
+          drawTest(ctx2);
+          
+          // Compare results - if different, noise is being applied
+          const dataURL1 = canvas1.toDataURL();
+          const dataURL2 = canvas2.toDataURL();
+          
           return {
             protected: dataURL1 !== dataURL2,
-            noiseLevel: dataURL1 === dataURL2 ? 0 : 'detected'
+            noiseLevel: dataURL1 !== dataURL2 ? 'Detected' : 'Not protected'
           };
         } catch (e) {
-          return { protected: 'error', noiseLevel: 'error' };
+          return { protected: false, noiseLevel: 'Error' };
         }
       })();
       
@@ -1220,6 +1369,98 @@ async function launchHealthPage(profile) {
       
       // Use the comprehensive detection
       data.deviceMemory = detectDeviceMemory();
+      
+      // Audio fingerprinting detection
+      data.audio = (() => {
+        try {
+          // Check if AudioContext exists
+          if (!window.AudioContext && !window.webkitAudioContext) {
+            return { protected: 'Unknown' };
+          }
+          
+          // Create audio context
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const oscillator = audioCtx.createOscillator();
+          const analyser = audioCtx.createAnalyser();
+          
+          // Get channel data multiple times
+          const buffer = audioCtx.createBuffer(1, 2048, 44100);
+          const data1 = buffer.getChannelData(0).slice(0);
+          const data2 = buffer.getChannelData(0).slice(0);
+          
+          // Check if values differ (indicating protection)
+          const sum1 = data1.reduce((a, b) => a + b, 0);
+          const sum2 = data2.reduce((a, b) => a + b, 0);
+          
+          return {
+            protected: sum1 !== sum2
+          };
+        } catch (e) {
+          return { protected: false };
+        }
+      })();
+      
+      // Font enumeration protection detection
+      data.fonts = {
+        protected: (() => {
+          try {
+            // Test for font protection
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = '16px Arial';
+            const width1 = ctx.measureText('Test').width;
+            const width2 = ctx.measureText('Test').width;
+            return width1 !== width2;
+          } catch (e) {
+            return false;
+          }
+        })()
+      };
+      
+      // WebGL protection detection
+      data.webgl = {
+        protected: (() => {
+          try {
+            // Test for WebGL protection
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (!gl) return false;
+            const param1 = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+            const param2 = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+            return param1 !== param2;
+          } catch (e) {
+            return false;
+          }
+        })()
+      };
+      
+      // Add font protection detection
+      data.fonts = (() => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          ctx.font = '16px Arial';
+          const width1 = ctx.measureText('Test String').width;
+          const width2 = ctx.measureText('Test String').width;
+          return { protected: width1 !== width2 };
+        } catch (e) {
+          return { protected: false };
+        }
+      })();
+      
+      // Add WebGL protection detection
+      data.webgl = (() => {
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl');
+          if (!gl) return { protected: false };
+          const param1 = gl.getParameter(gl.VENDOR);
+          const param2 = gl.getParameter(gl.VENDOR);
+          return { protected: param1 !== param2 };
+        } catch (e) {
+          return { protected: false };
+        }
+      })();
       
       return data;
     });
@@ -1315,10 +1556,19 @@ async function launchProfile(profile) {
     // Setup CDP client
     const client = await page.target().createCDPSession();
     
-    // Apply hardware settings first (this helps ensure they're set before other fingerprinting)
-    await applyHardwareSettings(page, profile);
-    
+    // Apply user agent and language settings FIRST (important for sequence)
+    await applyUserAgentSettings(page, profile);
+    await applyLanguageSettings(page, profile);
+
     // Then continue with other settings...
+    await applyHardwareSettings(page, profile);
+    await enhanceDeviceMemorySettings(page, profile);
+    await applyPlatformSettings(page, profile);
+
+    // Apply WebRTC and canvas settings
+    await applyWebRTCSettings(page, profile);
+    await applyCanvasFingerprinting(page, profile);
+    
     // Set user agent if specified
     if (profile.browser?.fingerprint?.userAgent) {
       await page.setUserAgent(profile.browser.fingerprint.userAgent);
@@ -1426,8 +1676,31 @@ async function launchProfile(profile) {
       })();
     `);
 
+    // In your launchProfile function, after line 1526 (after applyLanguageSettings)
+
+    // Apply fingerprint settings - add these lines
+    await applyHardwareSettings(page, profile);
+    await enhanceDeviceMemorySettings(page, profile);
+    await applyCanvasFingerprinting(page, profile);
+    await applyAudioFingerprinting(page, profile);
+    await applyFontProtection(page, profile);
+    await applyWebGLProtection(page, profile);
+
+    // Then continue with your existing fingerprint spoofing script
+    await page.evaluateOnNewDocument(`
+      // The comprehensive fingerprint spoofing script...
+    `);
+
     // In both launch functions, add this line after applyHardwareSettings
     await enhanceDeviceMemorySettings(page, profile);
+
+    // In both functions, add this line after applying hardware settings
+    await applyPlatformSettings(page, profile);
+
+    // Add Font and WebGL protection
+    await applyFontProtection(page, {...profile, browser: {...(profile.browser || {}), fontProtection: true}});
+    await applyWebGLProtection(page, {...profile, browser: {...(profile.browser || {}), webglProtection: true}});
+    console.log('Applied additional fingerprinting protections (Font, WebGL)');
 
     // AFTER applying all settings, navigate to target URL
     const targetUrl = profile.startupUrl || profile.startUrl || 'https://google.com';
@@ -2068,43 +2341,80 @@ async function applyTimezoneSettings(page, profile) {
   }
 }
 
-// Update language handling in both functions
+// Enhanced language settings function
 async function applyLanguageSettings(page, profile) {
-  console.log('Applying language settings...');
+  console.log('Applying enhanced language settings...');
   
-  if (profile.proxy?.language) {
-    const language = profile.proxy.language;
-    console.log(`Setting language to: ${language}`);
-    
-    await page.evaluateOnNewDocument(`
-      // Override language properties
-      Object.defineProperty(navigator, 'language', {
-        get: function() {
-          return "${language}";
-        }
-      });
-      
-      Object.defineProperty(navigator, 'languages', {
-        get: function() {
-          return ["${language}"];
-        }
-      });
-      
-      // Override Accept-Language header via JavaScript if possible
-      Object.defineProperty(navigator, 'userAgentData', {
-        get: function() {
-          return {
-            ...navigator.userAgentData,
-            getHighEntropyValues: function(hints) {
-              return Promise.resolve({
-                languages: ["${language}"]
-              });
-            }
-          };
-        }
-      });
-    `);
+  // Get the language from profile
+  const language = profile.proxy?.language || 'en-US';
+  console.log(`Setting language to: ${language}`);
+  
+  // Create languages array with main language first
+  const languages = [language];
+  
+  // Add fallback languages if main language has a region code
+  if (language.includes('-')) {
+    const baseLang = language.split('-')[0];
+    if (!languages.includes(baseLang)) {
+      languages.push(baseLang);
+    }
   }
+  
+  // Convert language settings to string for JavaScript injection
+  const languagesStr = JSON.stringify(languages);
+  
+  // Apply via CDP and JavaScript for complete coverage
+  const client = await page.target().createCDPSession();
+  
+  // 1. Set language and Accept-Language header via CDP
+  await client.send('Emulation.setLocaleOverride', { locale: language });
+  await client.send('Network.setExtraHTTPHeaders', {
+    headers: { 'Accept-Language': language + ',' + languages.join(',') + ';q=0.9' }
+  });
+  
+  // 2. Apply via JavaScript for complete navigator coverage
+  await page.evaluateOnNewDocument(`
+    (function() {
+      const targetLanguage = "${language}";
+      const targetLanguages = ${languagesStr};
+      
+      // Direct property override
+      navigator.__defineGetter__('language', function() { return targetLanguage; });
+      navigator.__defineGetter__('languages', function() { return targetLanguages; });
+      
+      // Object.defineProperty approach for stronger protection
+      try {
+        Object.defineProperty(navigator, 'language', {
+          value: targetLanguage,
+          configurable: false,
+          writable: false,
+          enumerable: true
+        });
+        
+        Object.defineProperty(navigator, 'languages', {
+          value: targetLanguages,
+          configurable: false,
+          writable: false,
+          enumerable: true
+        });
+      } catch(e) {
+        console.log('Language property definition failed:', e);
+      }
+      
+      // Handle Intl API for consistency
+      const originalDateTimeFormat = Intl.DateTimeFormat;
+      Intl.DateTimeFormat = function(...args) {
+        if (args.length <= 0 || !args[0]) {
+          args.unshift(targetLanguage);
+        }
+        return originalDateTimeFormat.apply(this, args);
+      };
+      
+      // Log for verification
+      console.log('Language set to:', navigator.language);
+      console.log('Languages set to:', navigator.languages);
+    })();
+  `);
 }
 
 // Updated hardware specs spoofing function
@@ -2277,3 +2587,499 @@ async function enhanceDeviceMemorySettings(page, profile) {
     `
   });
 }
+
+// Add this function to properly handle platform spoofing
+async function applyPlatformSettings(page, profile) {
+  console.log('Applying platform settings...');
+  
+  const platformValue = profile.os || 'Windows 10';
+  console.log(`Setting platform to: ${platformValue}`);
+  
+  // Apply via comprehensive approach for maximum reliability
+  await page.evaluateOnNewDocument(`
+    (function() {
+      // Map OS name to correct platform value
+      const platformMap = {
+        'Windows 10': 'Win32',
+        'Windows 11': 'Win32',
+        'Windows': 'Win32',
+        'macOS': 'MacIntel',
+        'Mac OS X': 'MacIntel',
+        'Linux': 'Linux x86_64',
+        'Android': 'Android',
+        'iOS': 'iPhone'
+      };
+      
+      // Get the correct platform value
+      const osName = "${platformValue}";
+      const platformValue = platformMap[osName] || osName;
+      
+      // Override platform in multiple ways
+      try {
+        // Standard property descriptor override
+        Object.defineProperty(navigator, 'platform', {
+          value: platformValue,
+          configurable: true,
+          writable: false,
+          enumerable: true
+        });
+        
+        // For user agent client hints API
+        if (navigator.userAgentData) {
+          const originalGetHighEntropyValues = navigator.userAgentData.getHighEntropyValues;
+          navigator.userAgentData.getHighEntropyValues = function(hints) {
+            return originalGetHighEntropyValues.call(this, hints)
+              .then(values => {
+                if (values.platform) {
+                  values.platform = platformValue;
+                }
+                return values;
+              });
+          };
+        }
+        
+        console.log('Platform successfully set to:', platformValue);
+      } catch (e) {
+        console.error('Failed to set platform:', e);
+      }
+    })();
+  `);
+}
+
+// Enhanced user agent spoofing function
+async function applyUserAgentSettings(page, profile) {
+  console.log('Applying enhanced user agent settings...');
+  
+  // Get the user agent from profile
+  const userAgent = profile.browser?.fingerprint?.userAgent || 
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36';
+  
+  console.log(`Setting user agent to: ${userAgent}`);
+  
+  // 1. Set via Puppeteer method
+  await page.setUserAgent(userAgent);
+  
+  // 2. Set via CDP for deeper integration
+  const client = await page.target().createCDPSession();
+  await client.send('Network.setUserAgentOverride', { userAgent });
+  
+  // 3. Use most aggressive JavaScript approach
+  await page.evaluateOnNewDocument(`
+    (function() {
+      const newUA = "${userAgent}";
+      
+      // Direct property overwrite first (simplest approach)
+      navigator.__defineGetter__('userAgent', function() { return newUA; });
+      
+      // Also use Object.defineProperty for better protection
+      try {
+        Object.defineProperty(Navigator.prototype, 'userAgent', {
+          get: function() { return newUA; },
+          configurable: false,
+          enumerable: true,
+        });
+      } catch(e) {
+        console.log('Failed prototype UA override:', e);
+        
+        // Fallback to navigator object directly
+        Object.defineProperty(navigator, 'userAgent', {
+          value: newUA,
+          configurable: false,
+          writable: false,
+          enumerable: true
+        });
+      }
+      
+      // For even deeper protection, create event listener for attempts to read UA
+      const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+      Object.getOwnPropertyDescriptor = function(obj, prop) {
+        if (obj === Navigator.prototype && prop === 'userAgent') {
+          return {
+            get: function() { return newUA; }
+          };
+        }
+        return originalGetOwnPropertyDescriptor(obj, prop);
+      };
+      
+      // Log to confirm proper setup
+      console.log('User agent successfully set to:', navigator.userAgent);
+    })();
+  `);
+}
+
+// Add this function to handle canvas fingerprinting protection
+async function applyCanvasFingerprinting(page, profile) {
+  console.log('Applying canvas fingerprinting protection...');
+  
+  const canvasNoise = profile.browser?.canvasNoise || false;
+  const noiseLevel = profile.browser?.canvasNoiseLevel || 0.1;
+  
+  console.log(`Canvas protection: ${canvasNoise ? 'Enabled' : 'Disabled'}, Noise level: ${noiseLevel}`);
+  
+  if (canvasNoise) {
+    await page.evaluateOnNewDocument(`
+      (function() {
+        // Save original functions
+        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+        const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+        const originalGetContext = HTMLCanvasElement.prototype.getContext;
+        
+        // Helper to apply noise to image data
+        function addNoiseToImageData(imageData, level = ${noiseLevel}) {
+          const data = imageData.data;
+          const noise = level * 255;
+          
+          // Only add noise to reasonably sized images to avoid affecting UI elements
+          if (imageData.width > 16 && imageData.height > 16) {
+            for (let i = 0; i < data.length; i += 4) {
+              // Add slight noise to each channel (R,G,B) but not alpha
+              data[i] = Math.max(0, Math.min(255, data[i] + (Math.random() * noise - noise/2)));
+              data[i+1] = Math.max(0, Math.min(255, data[i+1] + (Math.random() * noise - noise/2)));
+              data[i+2] = Math.max(0, Math.min(255, data[i+2] + (Math.random() * noise - noise/2)));
+            }
+          }
+          
+          return imageData;
+        }
+        
+        // Override getContext to track canvas usage
+        HTMLCanvasElement.prototype.getContext = function(...args) {
+          const context = originalGetContext.apply(this, args);
+          if (context && args[0] === '2d') {
+            this.__canvas_used_for_fingerprinting = true;
+          }
+          return context;
+        };
+        
+        // Override getImageData to add noise
+        CanvasRenderingContext2D.prototype.getImageData = function(...args) {
+          const imageData = originalGetImageData.apply(this, args);
+          
+          // Check if this is likely used for fingerprinting
+          if (this.canvas && this.canvas.__canvas_used_for_fingerprinting) {
+            return addNoiseToImageData(imageData, ${noiseLevel});
+          }
+          
+          return imageData;
+        };
+        
+        // Override toDataURL to add noise
+        HTMLCanvasElement.prototype.toDataURL = function(...args) {
+          // Flag this canvas as potentially used for fingerprinting
+          this.__canvas_used_for_fingerprinting = true;
+          
+          // Get the original data URL
+          const dataURL = originalToDataURL.apply(this, args);
+          
+          // For large enough canvas, add slight noise to hash part
+          if (this.width > 16 && this.height > 16) {
+            const commaIndex = dataURL.indexOf(',');
+            if (commaIndex !== -1) {
+              const prefix = dataURL.substring(0, commaIndex + 1);
+              const data = dataURL.substring(commaIndex + 1);
+              
+              // Add minimal noise to the encoded data
+              // This is subtle but effective against fingerprinting
+              const lastChar = data[data.length - 8];
+              const replacementChar = Math.random() < 0.5 ? 
+                String.fromCharCode(lastChar.charCodeAt(0) + 1) : 
+                String.fromCharCode(lastChar.charCodeAt(0) - 1);
+              
+              return prefix + data.substring(0, data.length - 8) + 
+                     replacementChar + data.substring(data.length - 7);
+            }
+          }
+          
+          return dataURL;
+        };
+        
+        // Override toBlob to add noise
+        HTMLCanvasElement.prototype.toBlob = function(callback, ...args) {
+          // Flag as used for fingerprinting
+          this.__canvas_used_for_fingerprinting = true;
+          
+          // Call the original function but intercept the blob
+          originalToBlob.call(this, function(blob) {
+            // For large enough canvases, modify the blob slightly
+            if (blob && this.width > 16 && this.height > 16) {
+              const reader = new FileReader();
+              reader.onload = function() {
+                // Get the blob as data URL, modify it, then convert back
+                const dataURL = reader.result;
+                
+                // Apply the same noise technique as in toDataURL
+                const commaIndex = dataURL.indexOf(',');
+                if (commaIndex !== -1) {
+                  const prefix = dataURL.substring(0, commaIndex + 1);
+                  const data = dataURL.substring(commaIndex + 1);
+                  
+                  // Modify slightly
+                  const lastChar = data[data.length - 8];
+                  const replacementChar = Math.random() < 0.5 ? 
+                    String.fromCharCode(lastChar.charCodeAt(0) + 1) : 
+                    String.fromCharCode(lastChar.charCodeAt(0) - 1);
+                  
+                  const modifiedDataURL = prefix + data.substring(0, data.length - 8) + 
+                                          replacementChar + data.substring(data.length - 7);
+                  
+                  // Convert back to blob
+                  fetch(modifiedDataURL).then(res => res.blob()).then(callback);
+                } else {
+                  callback(blob); // Fallback to original
+                }
+              };
+              reader.readAsDataURL(blob);
+            } else {
+              callback(blob); // Use original for small canvas
+            }
+          }.bind(this), ...args);
+        };
+        
+        // Add a detector to check if protection is working
+        window.__isCanvasProtectionWorking = function() {
+          try {
+            // Create two canvases and compare their output
+            const canvas1 = document.createElement('canvas');
+            const canvas2 = document.createElement('canvas');
+            canvas1.width = canvas2.width = 200;
+            canvas1.height = canvas2.height = 200;
+            
+            const ctx1 = canvas1.getContext('2d');
+            const ctx2 = canvas2.getContext('2d');
+            
+            // Draw the same content
+            ctx1.fillStyle = "rgb(100,200,50)";
+            ctx1.fillRect(0, 0, 200, 200);
+            ctx1.fillStyle = "rgba(0,0,200,0.5)";
+            ctx1.font = "30px Arial";
+            ctx1.fillText("Canvas Test", 10, 50);
+            
+            ctx2.fillStyle = "rgb(100,200,50)";
+            ctx2.fillRect(0, 0, 200, 200);
+            ctx2.fillStyle = "rgba(0,0,200,0.5)";
+            ctx2.font = "30px Arial";
+            ctx2.fillText("Canvas Test", 10, 50);
+            
+            // Compare outputs - should be different with protection
+            return canvas1.toDataURL() !== canvas2.toDataURL();
+          } catch (e) {
+            return false;
+          }
+        };
+        
+        console.log('Canvas fingerprinting protection enabled with noise level:', ${noiseLevel});
+      })();
+    `);
+  }
+}
+
+// Add audio fingerprinting protection
+async function applyAudioFingerprinting(page, profile) {
+  console.log('Applying audio fingerprinting protection...');
+  
+  const audioNoiseEnabled = profile.browser?.audioNoiseEnabled || false;
+  const noiseLevel = profile.browser?.audioNoiseLevel || 0.1;
+  
+  if (audioNoiseEnabled) {
+    console.log(`Enabling audio fingerprinting protection with noise level: ${noiseLevel}`);
+    
+    await page.evaluateOnNewDocument(`
+      (function() {
+        // Save original AudioContext methods
+        const originalAudioContext = window.AudioContext || window.webkitAudioContext;
+        const originalGetChannelData = AudioBuffer.prototype.getChannelData;
+        const originalGetFloatFrequencyData = AnalyserNode.prototype.getFloatFrequencyData;
+        
+        // Add noise to audio data
+        function addAudioNoise(data, noiseLevel) {
+          const noise = noiseLevel * 0.0003; // Keep noise very subtle
+          
+          for (let i = 0; i < data.length; i++) {
+            // Add minor noise to signal
+            data[i] += (Math.random() * noise) - (noise/2);
+          }
+          
+          return data;
+        }
+        
+        // Override getChannelData
+        AudioBuffer.prototype.getChannelData = function(channel) {
+          const data = originalGetChannelData.call(this, channel);
+          
+          // Don't modify if length is too short (likely not for fingerprinting)
+          if (this.length > 1000) {
+            return addAudioNoise(data, ${noiseLevel});
+          }
+          
+          return data;
+        };
+        
+        // Override getFloatFrequencyData
+        AnalyserNode.prototype.getFloatFrequencyData = function(array) {
+          originalGetFloatFrequencyData.call(this, array);
+          
+          // Only modify substantial data (likely used for fingerprinting)
+          if (array.length > 100) {
+            addAudioNoise(array, ${noiseLevel});
+          }
+          
+          return array;
+        };
+        
+        // Add detection for testing
+        window.__isAudioProtectionWorking = function() {
+          try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const analyser = audioCtx.createAnalyser();
+            const buffer = audioCtx.createBuffer(1, 4096, 44100);
+            
+            // Get data twice and compare - should be different with protection
+            const data1 = new Float32Array(buffer.length);
+            const channelData1 = buffer.getChannelData(0);
+            
+            const data2 = new Float32Array(buffer.length);
+            const channelData2 = buffer.getChannelData(0);
+            
+            // If protection is working, the data should be different
+            return !channelData1.every((val, i) => val === channelData2[i]);
+          } catch (e) {
+            return false;
+          }
+        };
+        
+        console.log('Audio fingerprinting protection enabled');
+      })();
+    `);
+  }
+}
+
+// Add font enumeration protection
+async function applyFontProtection(page, profile) {
+  console.log('Applying font enumeration protection...');
+  
+  const fontProtectionEnabled = profile.browser?.fontProtection || false;
+  
+  if (fontProtectionEnabled) {
+    await page.evaluateOnNewDocument(`
+      (function() {
+        // Override font measurement methods
+        const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
+        CanvasRenderingContext2D.prototype.measureText = function(text) {
+          const result = originalMeasureText.apply(this, arguments);
+          
+          // Add tiny random variation to width measurements
+          const originalWidth = result.width;
+          Object.defineProperty(result, 'width', {
+            get: function() {
+              return originalWidth * (1 + (Math.random() * 0.0001));
+            }
+          });
+          
+          return result;
+        };
+        
+        // Limit document fonts query
+        if (document.fonts && document.fonts.check) {
+          const originalCheck = document.fonts.check;
+          document.fonts.check = function(font, text) {
+            // Allow checking for common safe fonts
+            const safeFont = font.toLowerCase().includes('arial') || 
+                            font.toLowerCase().includes('times new roman') || 
+                            font.toLowerCase().includes('courier') ||
+                            font.toLowerCase().includes('sans-serif') ||
+                            font.toLowerCase().includes('serif');
+                            
+            if (safeFont) {
+              return originalCheck.apply(this, arguments);
+            }
+            
+            // For non-safe fonts, make result less predictable
+            return Math.random() > 0.5;
+          };
+        }
+        
+        console.log('Font enumeration protection enabled');
+      })();
+    `);
+  }
+}
+
+// Add WebGL fingerprinting protection
+async function applyWebGLProtection(page, profile) {
+  console.log('Applying WebGL fingerprinting protection...');
+  
+  const webglProtectionEnabled = profile.browser?.webglProtection || false;
+  
+  if (webglProtectionEnabled) {
+    await page.evaluateOnNewDocument(`
+      (function() {
+        // Store original WebGL getters
+        const getParameter = WebGLRenderingContext.prototype.getParameter;
+        const getExtension = WebGLRenderingContext.prototype.getExtension;
+        const getShaderPrecisionFormat = WebGLRenderingContext.prototype.getShaderPrecisionFormat;
+        
+        // Override getParameter
+        WebGLRenderingContext.prototype.getParameter = function(parameter) {
+          // Add noise to RENDERER and VENDOR strings
+          if (parameter === this.RENDERER || parameter === this.VENDOR) {
+            const result = getParameter.call(this, parameter);
+            // Tiny modification to renderer/vendor strings
+            return result + ' ';
+          }
+          
+          // Add slight noise to ALIASED_LINE_WIDTH_RANGE
+          if (parameter === this.ALIASED_LINE_WIDTH_RANGE) {
+            const result = getParameter.call(this, parameter);
+            result[0] += Math.random() * 0.01;
+            return result;
+          }
+          
+          return getParameter.call(this, parameter);
+        };
+        
+        // Do the same for WebGL2
+        if (window.WebGL2RenderingContext) {
+          WebGL2RenderingContext.prototype.getParameter = WebGLRenderingContext.prototype.getParameter;
+        }
+        
+        console.log('WebGL fingerprinting protection enabled');
+      })();
+    `);
+  }
+}
+
+// Add this at line 2966, right after the end of applyWebGLProtection
+
+// Call these in launchProfile
+const originalLaunchProfile = launchProfile;
+launchProfile = async function(profile) {
+  const result = await originalLaunchProfile(profile);
+  if (result.success) {
+    const browserInstance = browsers.get(profile.id);
+    if (browserInstance) {
+      // Apply additional protections
+      await applyFontProtection(browserInstance.page, profile);
+      await applyWebGLProtection(browserInstance.page, profile);
+      console.log('Applied additional fingerprinting protections (font, WebGL)');
+    }
+  }
+  return result;
+};
+
+// Call these in launchHealthPage
+const originalLaunchHealthPage = launchHealthPage;
+launchHealthPage = async function(profile) {
+  const result = await originalLaunchHealthPage(profile);
+  if (result.success) {
+    const browserInstance = browsers.get(`health_${profile.id}`);
+    if (browserInstance) {
+      // Apply additional protections
+      await applyFontProtection(browserInstance.page, profile);
+      await applyWebGLProtection(browserInstance.page, profile);
+      console.log('Applied additional fingerprinting protections to health page (font, WebGL)');
+    }
+  }
+  return result;
+};
