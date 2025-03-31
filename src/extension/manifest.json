@@ -1,0 +1,34 @@
+{
+    "manifest_version": 3,
+    "name": "Ticket Monitor",
+    "version": "1.0",
+    "description": "Monitor ticket availability on various ticket sites",
+    "permissions": [
+        "activeTab",
+        "storage",
+        "notifications",
+        "webNavigation"
+    ],
+    "host_permissions": [
+        "*://*.ticketmaster.com/*",
+        "*://*.stubhub.com/*",
+        "*://*.seatgeek.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://*.ticketmaster.com/*",
+                "*://*.stubhub.com/*",
+                "*://*.seatgeek.com/*"
+            ],
+            "js": ["content.js"],
+            "css": ["monitor.css"]
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    }
+} 

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ticket Monitor Settings</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <h2>Ticket Monitor Settings</h2>
+        
+        <div class="settings-group">
+            <label>
+                Check Interval (seconds)
+                <input type="number" id="checkInterval" min="1" max="10" value="2">
+            </label>
+        </div>
+
+        <div class="settings-group">
+            <label>
+                <input type="checkbox" id="autoPurchase">
+                Enable Auto Purchase
+            </label>
+        </div>
+
+        <div class="settings-group">
+            <label>
+                Max Price
+                <input type="number" id="maxPrice" min="0" step="0.01">
+            </label>
+        </div>
+
+        <div class="settings-group">
+            <label>
+                <input type="checkbox" id="notifications" checked>
+                Enable Notifications
+            </label>
+        </div>
+
+        <button id="saveSettings">Save Settings</button>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html> 

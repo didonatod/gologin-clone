@@ -1,0 +1,78 @@
+.ticket-monitor-widget {
+    position: fixed;
+    right: 20px;
+    top: 20px;
+    z-index: 9999;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 300px;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+.monitor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.monitor-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.monitor-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.monitor-status.active {
+    background: #48BB78;
+    color: white;
+}
+
+.monitor-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.monitor-button {
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.monitor-button:not(.secondary) {
+    background: #4299E1;
+    color: white;
+}
+
+.monitor-button.secondary {
+    background: #EDF2F7;
+    color: #2D3748;
+}
+
+.monitor-button:hover {
+    opacity: 0.9;
+}
+
+.monitor-stats {
+    font-size: 14px;
+    color: #4A5568;
+    padding-top: 12px;
+    border-top: 1px solid #E2E8F0;
+}
+
+.monitor-stats div {
+    margin-bottom: 4px;
+} 

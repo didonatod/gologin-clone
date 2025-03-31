@@ -110,6 +110,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import TicketPurchaseHistory from './components/TicketPurchaseHistory';
 
 const { ipcRenderer } = window.electron;
 
@@ -495,6 +496,8 @@ function App() {
             </Box>
           </Box>
         );
+      case 'tickets':
+        return <TicketPurchaseHistory />;
       default:
         return (
           <Box sx={{ p: 3 }}>
@@ -728,6 +731,33 @@ function App() {
                   primaryTypographyProps={{ 
                     fontWeight: activeSection === 'settings' ? 600 : 400,
                     color: activeSection === 'settings' ? 'primary.main' : 'inherit'
+                  }} 
+                />
+              </ListItem>
+              
+              <ListItem 
+                button 
+                onClick={() => setActiveSection('tickets')}
+                selected={activeSection === 'tickets'}
+                sx={{ 
+                  borderRadius: 2,
+                  mb: 0.5,
+                  '&.Mui-selected': {
+                    bgcolor: alpha('#1976d2', 0.08),
+                    '&:hover': {
+                      bgcolor: alpha('#1976d2', 0.12),
+                    }
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ color: activeSection === 'tickets' ? 'primary.main' : 'inherit' }}>
+                  <ConfirmationNumberIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Ticket Purchases" 
+                  primaryTypographyProps={{ 
+                    fontWeight: activeSection === 'tickets' ? 600 : 400,
+                    color: activeSection === 'tickets' ? 'primary.main' : 'inherit'
                   }} 
                 />
               </ListItem>
