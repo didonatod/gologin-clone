@@ -3617,35 +3617,14 @@ ipcMain.handle('debug-check-profiles', async () => {
 // Update or add this handler for creating profiles
 ipcMain.handle('create-profile', async (event, profileData) => {
   try {
-    console.log('Creating profile:', profileData); // Debug log
-    const profilesPath = path.join(userDataPath, 'profiles.json');
-    
-    // Read existing profiles
-    let profiles = [];
-    try {
-      const data = await fs.readFile(profilesPath, 'utf8');
-      profiles = JSON.parse(data);
-    } catch (error) {
-      console.log('No existing profiles file, will create new one');
-    }
-    
-    // Add new profile with ID if it doesn't have one
-    const newProfile = {
-      ...profileData,
-      id: profileData.id || Date.now().toString()
-    };
-    
-    // Add to profiles array
-    profiles.push(newProfile);
-    
-    // Save back to file
-    await fs.writeFile(profilesPath, JSON.stringify(profiles, null, 2), 'utf8');
-    console.log('Profile saved successfully'); // Debug log
-    
-    return { success: true, profile: newProfile };
+    const result = await createProfile(profileData);
+    return result;
   } catch (error) {
-    console.error('Error creating profile:', error);
-    return { success: false, error: error.message };
+    console.error('Error in create-profile handler:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 });
 
@@ -4165,5 +4144,513 @@ ipcMain.handle('get-profiles', async () => {
   } catch (error) {
     console.error('Error getting profiles:', error);
     return { success: false, error: error.message };
+  }
+});
+
+// Add this with your other IPC handlers
+ipcMain.handle('test-ticket-purchaser', async (event, config) => {
+  try {
+    const purchaser = new TicketPurchaser();
+    
+    // Always force dry run in test mode
+    config.dryRun = true;
+    
+    const result = await purchaser.purchaseTickets(null, config);
+    
+    return {
+      success: true,
+      testResult: result
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Add this near your other logging functions
+function logPurchaseAttempt(profileId, config, result) {
+  console.log(`Purchase attempt for profile ${profileId}:`, {
+    timestamp: new Date().toISOString(),
+    config: config,
+    result: result
+  });
+}
+
+// Update the IPC handler to include logging
+ipcMain.handle('start-ticket-purchase', async (event, data) => {
+  try {
+    const { profileId, purchaseConfig } = data;
+    console.log('Starting ticket purchase for profile:', profileId);
+    
+    // Log the attempt
+    logPurchaseAttempt(profileId, purchaseConfig, 'STARTED');
+    
+    // Get the profile data
+    const profile = await getProfileById(profileId);
+    if (!profile) {
+      throw new Error('Profile not found');
+    }
+
+    // Launch the profile's browser
+    const browser = await launchProfile(profile);
+    const page = await browser.newPage();
+
+    // Initialize ticket purchaser
+    const purchaser = new TicketPurchaser();
+    
+    // Start the purchase process
+    const result = await purchaser.purchaseTickets(page, {
+      ...purchaseConfig,
+      profile: profile
+    });
+
+    // Store purchase attempt in history
+    await storePurchaseInHistory({
+      profileId: profileId,
+      timestamp: new Date().toISOString(),
+      result: result,
+      config: purchaseConfig
+    });
+
+    // Log the result
+    logPurchaseAttempt(profileId, purchaseConfig, result);
+    
+    return {
+      success: true,
+      purchaseResult: result
+    };
+
+  } catch (error) {
+    console.error('Ticket purchase error:', error);
+    logPurchaseAttempt(profileId, purchaseConfig, {
+      error: error.message,
+      stack: error.stack
+    });
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Add this with your other IPC handlers
+ipcMain.handle('start-ticket-purchase', async (event, data) => {
+  try {
+    const { profileId, purchaseConfig } = data;
+    console.log('Starting ticket purchase with config:', purchaseConfig);
+    
+    // Initialize the TicketPurchaser
+    const purchaser = new TicketPurchaser();
+    
+    // Get the profile's browser instance
+    const browser = await launchProfile(profileId);
+    if (!browser) {
+      throw new Error('Failed to launch profile browser');
+    }
+
+    // Create a new page in the browser
+    const page = await browser.newPage();
+    
+    // Navigate to the ticket URL
+    if (purchaseConfig.ticketUrl) {
+      await page.goto(purchaseConfig.ticketUrl, {
+        waitUntil: 'networkidle0',
+        timeout: 30000
+      });
+    }
+
+    // Start the purchase process
+    const purchaseResult = await purchaser.purchaseTickets(page, {
+      ...purchaseConfig,
+      profileId
+    });
+
+    // Log the result
+    console.log('Purchase attempt result:', purchaseResult);
+
+    return {
+      success: true,
+      completed: purchaseResult.success,
+      dryRun: purchaseConfig.dryRun,
+      details: purchaseResult,
+      orderDetails: purchaseResult.orderDetails || null
+    };
+
+  } catch (error) {
+    console.error('Error in start-ticket-purchase:', error);
+    return {
+      success: false,
+      error: error.message,
+      details: {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        stack: error.stack
+      }
+    };
+  }
+});
+
+// Add this helper function if you don't already have it
+async function launchProfile(profileId) {
+  try {
+    // Get profile details
+    const profile = await getProfileById(profileId);
+    if (!profile) {
+      throw new Error('Profile not found');
+    }
+
+    // Launch the browser with profile settings
+    const browser = await puppeteer.launch({
+      headless: false,
+      defaultViewport: null,
+      args: [
+        '--start-maximized',
+        '--disable-blink-features=AutomationControlled'
+      ],
+      userDataDir: profile.userDataPath
+    });
+
+    return browser;
+  } catch (error) {
+    console.error('Error launching profile:', error);
+    throw error;
+  }
+}
+
+// Add this helper function if you don't already have it
+async function getProfileById(profileId) {
+  try {
+    console.log('Getting profile by ID:', profileId);
+    const userDataPath = app.getPath('userData');
+    const profilesPath = path.join(userDataPath, 'profiles.json');
+
+    // Check if profiles file exists
+    if (!fileExists(profilesPath)) {
+      console.log('Profiles file not found, creating new one');
+      await fs.writeFile(profilesPath, '[]', 'utf8');
+      return null;
+    }
+
+    const data = await fs.readFile(profilesPath, 'utf8');
+    const profiles = JSON.parse(data);
+    console.log('Loaded profiles:', profiles);
+
+    return profiles.find(p => p.id === profileId);
+  } catch (error) {
+    console.error('Error in getProfileById:', error);
+    return null;
+  }
+}
+
+// Add or update this IPC handler
+ipcMain.handle('get-profile', async (event, { profileId }) => {
+  try {
+    console.log('Getting profile:', profileId);
+    
+    // Your profile fetching logic here
+    const profile = await getProfileById(profileId);
+    
+    if (!profile) {
+      throw new Error('Profile not found');
+    }
+
+    return {
+      success: true,
+      profile: profile
+    };
+  } catch (error) {
+    console.error('Error getting profile:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Helper function to get profile by ID
+async function getProfileById(profileId) {
+  try {
+    // Your profile fetching implementation here
+    // This should return the profile data from your storage
+    const profiles = await loadProfiles(); // Implement this based on your storage method
+    return profiles.find(p => p.id === profileId);
+  } catch (error) {
+    console.error('Error in getProfileById:', error);
+    throw error;
+  }
+}
+
+// Add this IPC handler near your other IPC handlers
+ipcMain.handle('get-profile', async (event, { profileId }) => {
+  try {
+    console.log('Getting profile with ID:', profileId);
+    
+    // Use the existing getProfileById function
+    const profile = await getProfileById(profileId);
+    console.log('Found profile:', profile);
+
+    if (!profile) {
+      return {
+        success: false,
+        error: 'Profile not found'
+      };
+    }
+
+    return {
+      success: true,
+      profile: profile
+    };
+  } catch (error) {
+    console.error('Error in get-profile handler:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Update or add the getProfileById function
+async function getProfileById(profileId) {
+  try {
+    // Get the user data path
+    const userDataPath = app.getPath('userData');
+    const profilesPath = path.join(userDataPath, 'profiles.json');
+    
+    // Read profiles from file
+    let profiles = [];
+    try {
+      const data = await fs.readFile(profilesPath, 'utf8');
+      profiles = JSON.parse(data);
+    } catch (error) {
+      console.error('Error reading profiles:', error);
+      return null;
+    }
+
+    // Find the profile
+    const profile = profiles.find(p => p.id === profileId);
+    
+    if (!profile) {
+      console.log('No profile found with ID:', profileId);
+      return null;
+    }
+
+    // Add additional profile data if needed
+    const enhancedProfile = {
+      ...profile,
+      userDataPath: path.join(userDataPath, 'profiles', profileId),
+      // Add any other needed profile data
+    };
+
+    console.log('Found profile:', enhancedProfile);
+    return enhancedProfile;
+
+  } catch (error) {
+    console.error('Error in getProfileById:', error);
+    throw error;
+  }
+}
+
+// Add this helper function to load profiles
+async function loadProfiles() {
+  try {
+    const userDataPath = app.getPath('userData');
+    const profilesPath = path.join(userDataPath, 'profiles.json');
+    
+    const data = await fs.readFile(profilesPath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error loading profiles:', error);
+    return [];
+  }
+}
+
+// Add this IPC handler with your other IPC handlers
+ipcMain.handle('get-profile', async (event, { profileId }) => {
+  try {
+    console.log('Getting profile with ID:', profileId);
+    
+    // Get the user data path
+    const userDataPath = app.getPath('userData');
+    const profilesPath = path.join(userDataPath, 'profiles.json');
+    
+    // Read profiles from file
+    let profiles = [];
+    try {
+      const data = await fs.readFile(profilesPath, 'utf8');
+      profiles = JSON.parse(data);
+      console.log('Loaded profiles:', profiles);
+    } catch (error) {
+      console.error('Error reading profiles:', error);
+      if (error.code === 'ENOENT') {
+        // Create profiles file if it doesn't exist
+        await fs.writeFile(profilesPath, '[]', 'utf8');
+      } else {
+        throw error;
+      }
+    }
+
+    // Find the profile
+    const profile = profiles.find(p => p.id === profileId);
+    console.log('Found profile:', profile);
+
+    if (!profile) {
+      return {
+        success: false,
+        error: 'Profile not found'
+      };
+    }
+
+    // Add additional profile data
+    const enhancedProfile = {
+      ...profile,
+      userDataPath: path.join(userDataPath, 'profiles', profileId),
+      lastAccessed: new Date().toISOString()
+    };
+
+    return {
+      success: true,
+      profile: enhancedProfile
+    };
+
+  } catch (error) {
+    console.error('Error in get-profile handler:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Add this helper function if you don't already have it
+async function loadProfiles() {
+  try {
+    const userDataPath = app.getPath('userData');
+    const profilesPath = path.join(userDataPath, 'profiles.json');
+    
+    try {
+      const data = await fs.readFile(profilesPath, 'utf8');
+      return JSON.parse(data);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // Create profiles file if it doesn't exist
+        await fs.writeFile(profilesPath, '[]', 'utf8');
+        return [];
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error loading profiles:', error);
+    return [];
+  }
+}
+
+// Add this helper function to create a profile
+async function createProfile(profileData) {
+  try {
+    const userDataPath = app.getPath('userData');
+    const profilesPath = path.join(userDataPath, 'profiles.json');
+    
+    // Load existing profiles
+    const profiles = await loadProfiles();
+    
+    // Create new profile
+    const newProfile = {
+      id: profileData.id || `profile-${Date.now()}`,
+      name: profileData.name || `Profile ${profiles.length + 1}`,
+      created: new Date().toISOString(),
+      ...profileData
+    };
+    
+    // Add to profiles array
+    profiles.push(newProfile);
+    
+    // Save updated profiles
+    await fs.writeFile(profilesPath, JSON.stringify(profiles, null, 2), 'utf8');
+    
+    return {
+      success: true,
+      profile: newProfile
+    };
+  } catch (error) {
+    console.error('Error creating profile:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Add these with your other IPC handlers
+ipcMain.handle('get-profile-details', async (event, { profileId }) => {
+  try {
+    console.log('Getting profile details:', profileId);
+    
+    // Use the existing getProfileById function
+    const profile = await getProfileById(profileId);
+    
+    if (!profile) {
+      return {
+        success: false,
+        error: 'Profile not found'
+      };
+    }
+
+    return {
+      success: true,
+      profile: profile
+    };
+  } catch (error) {
+    console.error('Error getting profile details:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('create-profile', async (event, profileData) => {
+  try {
+    console.log('Creating new profile:', profileData);
+    
+    // Use your existing createProfile function
+    const result = await createProfile(profileData);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create profile');
+    }
+
+    // Store the profile
+    const userDataPath = app.getPath('userData');
+    const profilesPath = path.join(userDataPath, 'profiles.json');
+    
+    // Read existing profiles
+    let profiles = [];
+    try {
+      const data = await fs.readFile(profilesPath, 'utf8');
+      profiles = JSON.parse(data);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
+    // Add new profile
+    profiles.push(result.profile);
+
+    // Save updated profiles
+    await fs.writeFile(profilesPath, JSON.stringify(profiles, null, 2), 'utf8');
+
+    return {
+      success: true,
+      profile: result.profile
+    };
+  } catch (error) {
+    console.error('Error creating profile:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 });
