@@ -1,0 +1,335 @@
+Product Requirements Document (PRD): GoLogin Profile Configuration for Ticketmaster Automation
+Objective: Create a GoLogin profile optimized for purchasing tickets on Ticketmaster, including proxy setup, fingerprint spoofing, and backend code integration.
+________________________________________
+1. Profile Setup Workflow
+1.1 GoLogin Profile Creation Tabs & Recommendations
+Below are the tabs in GoLogin’s profile creator and the recommended settings for Ticketmaster:
+Tab Key Settings    Recommended Value
+General Profile Name, OS, Browser   - OS: Windows 10 or macOS 14 
+- Browser: Chrome 120
+Proxy   Proxy Type, Host, Port, Authentication  - Type: SOCKS5 
+- Host: geo.iproyal.com 
+- Port: 3000
+Fingerprint WebGL, Canvas, WebRTC, Fonts    - WebGL Spoofing: Enable 
+- Canvas Noise: Randomize hash
+Screen  Resolution, Color Depth - Resolution: Match your device (e.g., 1920x1080) 
+- Color Depth: 24-bit
+Timezone    Timezone, Geolocation   - Timezone: America/New_York 
+- Geolocation: Enable GPS spoofing
+Advanced    Cookies, Extensions - Cookies: Import clean cookies 
+- Extensions: uBlock Origin (optional)
+________________________________________
+2. Proxy Configuration Best Practices
+2.1 Proxy Requirements for Ticketmaster
+•   Residential Proxies: Use geo-targeted residential IPs (e.g., US IPs for Ticketmaster USA).
+•   Rotation: Rotate IPs every 3–5 requests to avoid rate limits.
+•   Validation: Test proxies using ipinfo.io to confirm IP/country.
+2.2 Proxy Setup in GoLogin
+1.  Proxy Tab:
+o   Type: SOCKS5 (recommended for speed and compatibility).
+o   Host/Port: Provided by your proxy provider (e.g., geo.iproyal.com:3000).
+o   Authentication: username:password from your proxy service.
+o   Test Proxy: Use GoLogin’s built-in checker to validate connectivity.
+ 
+________________________________________
+3. Backend Code for Profile Automation
+3.1 GoLogin API Integration (Python)
+python
+Copy
+from gologin import GoLogin  
+from selenium import webdriver  
+
+# Initialize GoLogin profile  
+gl = GoLogin({  
+    "token": "YOUR_GOLOGIN_API_TOKEN",  
+    "profile_id": "PROFILE_ID",  
+    "proxy": "socks5://user:pass@geo.iproyal.com:3000",  
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...",  
+    "webgl": {  
+        "mode": "noise",  # Spoof WebGL hash  
+    },  
+    "timezone": {  
+        "id": "America/New_York",  
+        "autoDetect": False  
+    }  
+})  
+
+# Launch browser with profile  
+debugger_address = gl.start()  
+options = webdriver.ChromeOptions()  
+options.debugger_address = debugger_address  
+driver = webdriver.Remote(command_executor=debugger_address, options=options)  
+
+# Navigate to Ticketmaster  
+driver.get("https://www.ticketmaster.com")  
+3.2 Proxy Validation (Python)
+python
+Copy
+import requests  
+
+def validate_proxy(proxy):  
+    try:  
+        response = requests.get(  
+            "https://api.ipify.org",  
+            proxies={"http": proxy, "https": proxy},  
+            timeout=10  
+        )  
+        return response.text == proxy.split("@")[1].split(":")[0]  
+    except:  
+        return False  
+
+proxy = "socks5://user:pass@geo.iproyal.com:3000"  
+assert validate_proxy(proxy), "Proxy validation failed!"  
+3.3 CAPTCHA Solving (2Captcha API)
+python
+Copy
+from twocaptcha import Solver  
+
+solver = Solver('2CAPTCHA_API_KEY')  
+result = solver.hcaptcha(sitekey='TICKETMASTER_SITEKEY', url='https://www.ticketmaster.com')  
+captcha_token = result['code']  
+
+# Inject CAPTCHA token into the page  
+driver.execute_script(f'document.querySelector("[name=h-captcha-response]").value = "{captcha_token}";')  
+driver.find_element_by_id("submit-button").click()  
+________________________________________
+4. Fingerprint Spoofing Techniques
+4.1 WebGL/Canvas Spoofing (Puppeteer)
+javascript
+Copy
+await page.evaluateOnNewDocument(() => {  
+    const canvas = document.createElement('canvas');  
+    const gl = canvas.getContext('webgl');  
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');  
+    WebGLRenderingContext.prototype.getParameter = function(param) {  
+        return param === debugInfo.UNMASKED_RENDERER_WEBGL ? 'ANGLE (NVIDIA RTX 3080)' :  
+            Reflect.apply(WebGLRenderingContext.prototype.getParameter, this, [param]);  
+    };  
+    HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,fake==';  
+});  
+4.2 User Agent Rotation
+python
+Copy
+import random  
+
+user_agents = [  
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...",  
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15...",  
+]  
+
+# Rotate user agent per session  
+driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": random.choice(user_agents)})  
+________________________________________
+5. Data Flow Architecture
+plaintext
+Copy
+1. Profile Created → 2. Proxy Validated → 3. Browser Launched → 4. Fingerprint Applied → 5. CAPTCHA Solved → 6. Ticket Purchased  
+System Diagram
+mermaid
+Copy
+graph TD  
+  A[GoLogin Profile] --> B[Proxy Server]  
+  B --> C[Ticketmaster]  
+  C --> D[CAPTCHA Solver]  
+  D --> E[Checkout]  
+________________________________________
+6. Risks & Mitigations
+Risk    Mitigation
+IP Blocking Rotate residential proxies every 5 requests.
+CAPTCHA Detection   Use 2Captcha with randomized solving delays.
+Behavioral Analysis Simulate mouse movements/keystrokes.
+________________________________________
+7. Ethical & Legal Compliance
+•   BOTS Act Compliance: This PRD is for educational purposes only. Automated ticket purchasing violates Ticketmaster’s ToS.
+•   Recommendations: Use proxies/fingerprints only for research or penetration testing.
+________________________________________
+8. Tools & References
+•   Proxies: IPRoyal, Bright Data
+•   CAPTCHA Solving: 2Captcha
+•   Fingerprint Testing: AMIUnique
+________________________________________
+Technical Deep Dive: How GoLogin Uses Profile Data to Generate a Functional Browser Profile
+This document explains how GoLogin processes inputs from each profile tab to create a browser instance with spoofed fingerprints, proxies, and configurations.
+Includes code examples for backend logic and integration.
+________________________________________
+1. Profile Data Flow
+GoLogin converts profile settings into browser launch flags, JavaScript injections, and proxy configurations. Below is the breakdown:
+1.1 General Tab
+•   OS: Sets navigator.platform, navigator.userAgent, and OS-specific CSS media queries.
+•   Browser: Defines Chrome/Firefox version in userAgent and browser-specific behaviors.
+Code Example (User Agent Spoofing):
+python
+Copy
+from selenium import webdriver  
+
+options = webdriver.ChromeOptions()  
+options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")  
+driver = webdriver.Chrome(options=options)  
+________________________________________
+1.2 Proxy Tab
+GoLogin configures proxies using Chromium’s --proxy-server flag and handles authentication.
+Backend Proxy Code (Python):
+python
+Copy
+from selenium import webdriver  
+
+proxy = "socks5://user:pass@geo.iproyal.com:3000"  
+options = webdriver.ChromeOptions()  
+options.add_argument(f"--proxy-server={proxy}")  
+
+# Authenticate proxy (if required)  
+options.add_extension('proxy_auth_plugin.zip')  # Load proxy auth plugin  
+driver = webdriver.Chrome(options=options)  
+________________________________________
+1.3 Fingerprint Tab
+GoLogin injects JavaScript to override browser APIs like WebGL, Canvas, and WebRTC.
+Canvas/WebGL Spoofing (Puppeteer):
+javascript
+Copy
+const puppeteer = require('puppeteer');  
+
+async function spoofFingerprint() {  
+  const browser = await puppeteer.launch();  
+  const page = await browser.newPage();  
+
+  await page.evaluateOnNewDocument(() => {  
+    // Spoof WebGL  
+    const canvas = document.createElement('canvas');  
+    const gl = canvas.getContext('webgl');  
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');  
+    gl.getParameter = (param) => {  
+      return param === debugInfo.UNMASKED_RENDERER_WEBGL ? 'ANGLE (NVIDIA RTX 3080)' :  
+        Reflect.apply(gl.getParameter, gl, [param]);  
+    };  
+
+    // Spoof Canvas  
+    HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,fake==';  
+  });  
+
+  await page.goto('https://ticketmaster.com');  
+}  
+________________________________________
+1.4 Screen Tab
+Sets viewport dimensions and color depth via Chromium flags.
+Code Example (Resolution Spoofing):
+python
+Copy
+from selenium import webdriver  
+
+options = webdriver.ChromeOptions()  
+options.add_argument("--window-size=1920,1080")  
+driver = webdriver.Chrome(options=options)  
+
+# Override screen resolution via JavaScript  
+driver.execute_script("Object.defineProperty(screen, 'width', { value: 1920 });")  
+driver.execute_script("Object.defineProperty(screen, 'height', { value: 1080 });")  
+________________________________________
+1.5 Timezone Tab
+Configures timezone via Chromium flags and JavaScript.
+Code Example:
+python
+Copy
+from selenium import webdriver  
+
+options = webdriver.ChromeOptions()  
+options.add_argument("--timezone=America/New_York")  
+driver = webdriver.Chrome(options=options)  
+
+# Override JavaScript timezone  
+driver.execute_script("Intl.DateTimeFormat().resolvedOptions().timeZone = 'America/New_York';")  
+________________________________________
+1.6 Advanced Tab
+•   Cookies: Stored in isolated userDataDir folders.
+•   Extensions: Loaded as unpacked CRX files.
+Cookie Import Code:
+python
+Copy
+from selenium import webdriver  
+
+options = webdriver.ChromeOptions()  
+options.add_argument("--user-data-dir=/path/to/profile")  # Load cookies from profile  
+driver = webdriver.Chrome(options=options)  
+________________________________________
+2. Full Backend Integration (Python + GoLogin API)
+2.1 Profile Initialization
+python
+Copy
+from gologin import GoLogin  
+from selenium import webdriver  
+
+gl = GoLogin({  
+  "token": "API_TOKEN",  
+  "profile_id": "tm_ny_profile",  
+  "proxy": "socks5://user:pass@geo.iproyal.com:3000",  
+  "os": "win",  
+  "browser": "chrome",  
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",  
+  "webgl": {"mode": "noise"},  
+  "timezone": {"id": "America/New_York"},  
+  "screen": {"resolution": "1920x1080"}  
+})  
+
+debugger_address = gl.start()  
+options = webdriver.ChromeOptions()  
+options.debugger_address = debugger_address  
+driver = webdriver.Remote(command_executor=debugger_address, options=options)  
+2.2 Proxy Validation & Rotation
+python
+Copy
+import requests  
+from itertools import cycle  
+
+proxies = cycle(["socks5://proxy1:3000", "socks5://proxy2:4000"])  
+
+def test_proxy(proxy):  
+    try:  
+        return requests.get("https://api.ipify.org", proxies={"http": proxy}, timeout=10).text == proxy.split("@")[1].split(":")[0]  
+    except:  
+        return False  
+
+current_proxy = next(proxies)  
+while not test_proxy(current_proxy):  
+    current_proxy = next(proxies)  
+
+# Update GoLogin profile with new proxy  
+gl.update_profile("tm_ny_profile", {"proxy": current_proxy})  
+________________________________________
+2.3 CAPTCHA Handling
+python
+Copy
+from twocaptcha import Solver  
+
+solver = Solver('2CAPTCHA_API_KEY')  
+result = solver.hcaptcha(sitekey='TICKETMASTER_SITEKEY', url='https://ticketmaster.com')  
+
+# Inject CAPTCHA token  
+driver.execute_script(f'document.querySelector("[name=h-captcha-response]").value = "{result["code"]}";')  
+driver.find_element_by_id("submit-ticket").click()  
+________________________________________
+3. How GoLogin Generates the Profile
+1.  Profile Config JSON:
+json
+Copy
+{  
+  "name": "tm_ny_profile",  
+  "proxy": "socks5://user:pass@geo.iproyal.com:3000",  
+  "os": "win",  
+  "browser": "chrome",  
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",  
+  "webgl": {"mode": "noise"},  
+  "timezone": {"id": "America/New_York"},  
+  "screen": {"resolution": "1920x1080"}  
+}  
+2.  Launch Command:
+bash
+Copy
+chrome --user-data-dir=/tmp/gologin/tm_ny_profile --proxy-server=socks5://geo.iproyal.com:3000 --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."  
+3.  Fingerprint Spoofing: Injects JavaScript to override navigator, WebGL, and Canvas APIs.
+________________________________________
+4. Anti-Detection Checklist for Ticketmaster
+1.  Use residential proxies (e.g., IPRoyal, Bright Data).
+2.  Rotate user agents and proxies every 3–5 requests.
+3.  Spoof WebGL, Canvas, and WebRTC fingerprints.
+4.  Mimic human behavior with randomized clicks/delays.
+
+

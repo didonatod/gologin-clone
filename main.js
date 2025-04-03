@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
-const fs = require('fs').promises;
+const fs = require('fs');
 const Store = require('electron-store');
 const puppeteer = require('puppeteer');
 
@@ -22,13 +22,61 @@ function createWindow() {
     }
   });
 
-  // Load dev or prod app
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Loading development URL: http://localhost:3000');
-    mainWindow.loadURL('http://localhost:3000');
+  // Try to determine if we're in development mode
+  const isDev = process.env.NODE_ENV === 'development' || !fs.existsSync(path.join(__dirname, './build/index.html'));
+  
+  if (isDev) {
+    // Development mode - try to load from dev server
+    console.log('Development mode detected, attempting to load from localhost:3000');
+    
+    // Try to connect to development server
+    mainWindow.loadURL('http://localhost:3000').catch(() => {
+      // Show a useful error page if we can't connect to the dev server
+      mainWindow.loadURL(`data:text/html;charset=utf-8,
+        <html>
+          <head><title>Development Error</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h1>Development Server Not Found</h1>
+            <p>Could not connect to React development server at <code>http://localhost:3000</code></p>
+            <p>To resolve this:</p>
+            <ol>
+              <li>Open a new terminal window</li>
+              <li>Run: <code>cd ${__dirname} && npm run start-react</code></li>
+              <li>Wait for the React server to start (you'll see "Compiled successfully")</li>
+              <li>Reload this window or restart Electron</li>
+            </ol>
+          </body>
+        </html>
+      `);
+    });
   } else {
-    console.log('Loading production build file');
-    mainWindow.loadFile('./build/index.html');
+    // Production mode - load from build directory
+    console.log('Production mode detected, loading from build directory');
+    
+    // First check if the build file exists
+    try {
+      if (!fs.existsSync(path.join(__dirname, './build/index.html'))) {
+        throw new Error('Build file not found');
+      }
+      mainWindow.loadFile('./build/index.html');
+    } catch (err) {
+      console.error('Failed to load build file:', err);
+      mainWindow.loadURL(`data:text/html;charset=utf-8,
+        <html>
+          <head><title>Error</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h1>Build File Not Found</h1>
+            <p>The production build files are missing. You need to build the application first:</p>
+            <pre>npm run build</pre>
+          </body>
+        </html>
+      `);
+    }
+  }
+  
+  // Add DevTools in development mode
+  if (isDev) {
+    mainWindow.webContents.openDevTools();
   }
 }
 
@@ -40,14 +88,14 @@ async function getProfileById(profileId) {
     const profilesPath = path.join(userDataPath, 'profiles.json');
 
     try {
-      await fs.access(profilesPath);
+      await fs.promises.access(profilesPath);
     } catch (error) {
       console.log('Profiles file not found, creating new one');
-      await fs.writeFile(profilesPath, '[]', 'utf8');
+      await fs.promises.writeFile(profilesPath, '[]', 'utf8');
       return null;
     }
 
-    const data = await fs.readFile(profilesPath, 'utf8');
+    const data = await fs.promises.readFile(profilesPath, 'utf8');
     const profiles = JSON.parse(data);
     
     console.log('Looking for profile with ID:', profileId);
@@ -74,8 +122,8 @@ async function storePurchaseInHistory(purchaseData) {
     // Check if history file exists
     let history = [];
     try {
-      await fs.access(historyPath);
-      const data = await fs.readFile(historyPath, 'utf8');
+      await fs.promises.access(historyPath);
+      const data = await fs.promises.readFile(historyPath, 'utf8');
       history = JSON.parse(data);
     } catch (error) {
       console.log('Purchase history file not found, creating new one');
@@ -85,7 +133,7 @@ async function storePurchaseInHistory(purchaseData) {
     history.push(purchaseData);
     
     // Save updated history
-    await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf8');
+    await fs.promises.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf8');
     console.log('Purchase history updated');
     
     return { success: true };
@@ -140,7 +188,7 @@ async function launchProfile(profileInput) {
     const profilePath = path.join(userDataPath, 'profiles', profile.id.toString());
     
     try {
-      await fs.mkdir(profilePath, { recursive: true });
+      await fs.promises.mkdir(profilePath, { recursive: true });
     } catch (error) {
       console.error('Error creating profile directory:', error);
       // Continue even if there's an error - the directory might already exist
@@ -239,14 +287,14 @@ app.whenReady().then(() => {
       const profilesPath = path.join(userDataPath, 'profiles.json');
       
       try {
-        await fs.access(profilesPath);
+        await fs.promises.access(profilesPath);
       } catch (error) {
         console.log('Profiles file not found, creating new one');
-        await fs.writeFile(profilesPath, '[]', 'utf8');
+        await fs.promises.writeFile(profilesPath, '[]', 'utf8');
         return [];
       }
       
-      const data = await fs.readFile(profilesPath, 'utf8');
+      const data = await fs.promises.readFile(profilesPath, 'utf8');
       return JSON.parse(data);
     } catch (error) {
       console.error('Error fetching profiles:', error);
@@ -373,14 +421,14 @@ app.whenReady().then(() => {
       const historyPath = path.join(userDataPath, 'purchase-history.json');
       
       try {
-        await fs.access(historyPath);
+        await fs.promises.access(historyPath);
       } catch (error) {
         console.log('Purchase history file not found, creating new one');
-        await fs.writeFile(historyPath, '[]', 'utf8');
+        await fs.promises.writeFile(historyPath, '[]', 'utf8');
         return [];
       }
       
-      const data = await fs.readFile(historyPath, 'utf8');
+      const data = await fs.promises.readFile(historyPath, 'utf8');
       return JSON.parse(data);
     } catch (error) {
       console.error('Error fetching purchase history:', error);

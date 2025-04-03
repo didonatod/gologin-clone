@@ -1722,7 +1722,13 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
           
           <RadioGroup
             value={profileData.webrtc.mode}
-            onChange={(e) => handleChange('webrtc', 'mode', e.target.value)}
+            onChange={(e) => setProfileData(prevData => ({
+              ...prevData,
+              webrtc: {
+                ...prevData.webrtc,
+                mode: e.target.value
+              }
+            }))}
           >
             <FormControlLabel 
               value="disabled" 
@@ -1866,14 +1872,16 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                   <Select
                     value={profileData.webrtc.mediaDevices.audioInputs}
                     onChange={(e) => {
-                      const newWebRTC = {
-                        ...profileData.webrtc,
-                        mediaDevices: {
-                          ...profileData.webrtc.mediaDevices,
-                          audioInputs: e.target.value
+                      setProfileData(prevData => ({
+                        ...prevData,
+                        webrtc: {
+                          ...prevData.webrtc,
+                          mediaDevices: {
+                            ...prevData.webrtc.mediaDevices,
+                            audioInputs: e.target.value
+                          }
                         }
-                      };
-                      handleChange('webrtc', '', newWebRTC);
+                      }));
                     }}
                   >
                     <MenuItem value={0}>None</MenuItem>
@@ -1904,14 +1912,16 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                   <Select
                     value={profileData.webrtc.mediaDevices.videoInputs}
                     onChange={(e) => {
-                      const newWebRTC = {
-                        ...profileData.webrtc,
-                        mediaDevices: {
-                          ...profileData.webrtc.mediaDevices,
-                          videoInputs: e.target.value
+                      setProfileData(prevData => ({
+                        ...prevData,
+                        webrtc: {
+                          ...prevData.webrtc,
+                          mediaDevices: {
+                            ...prevData.webrtc.mediaDevices,
+                            videoInputs: e.target.value
+                          }
                         }
-                      };
-                      handleChange('webrtc', '', newWebRTC);
+                      }));
                     }}
                   >
                     <MenuItem value={0}>None</MenuItem>
@@ -1942,14 +1952,16 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                   <Select
                     value={profileData.webrtc.mediaDevices.audioOutputs}
                     onChange={(e) => {
-                      const newWebRTC = {
-                        ...profileData.webrtc,
-                        mediaDevices: {
-                          ...profileData.webrtc.mediaDevices,
-                          audioOutputs: e.target.value
+                      setProfileData(prevData => ({
+                        ...prevData,
+                        webrtc: {
+                          ...prevData.webrtc,
+                          mediaDevices: {
+                            ...prevData.webrtc.mediaDevices,
+                            audioOutputs: e.target.value
+                          }
                         }
-                      };
-                      handleChange('webrtc', '', newWebRTC);
+                      }));
                     }}
                   >
                     <MenuItem value={0}>None</MenuItem>
@@ -1975,11 +1987,13 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                   <Switch
                     checked={profileData.webrtc.ipProtection}
                     onChange={(e) => {
-                      const newWebRTC = {
-                        ...profileData.webrtc,
-                        ipProtection: e.target.checked
-                      };
-                      handleChange('webrtc', '', newWebRTC);
+                      setProfileData(prevData => ({
+                        ...prevData,
+                        webrtc: {
+                          ...prevData.webrtc,
+                          ipProtection: e.target.checked
+                        }
+                      }));
                     }}
                     color="primary"
                   />
@@ -2001,11 +2015,13 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                   <Switch
                     checked={profileData.webrtc.peerConnectionEnabled}
                     onChange={(e) => {
-                      const newWebRTC = {
-                        ...profileData.webrtc,
-                        peerConnectionEnabled: e.target.checked
-                      };
-                      handleChange('webrtc', '', newWebRTC);
+                      setProfileData(prevData => ({
+                        ...prevData,
+                        webrtc: {
+                          ...prevData.webrtc,
+                          peerConnectionEnabled: e.target.checked
+                        }
+                      }));
                     }}
                     color="primary"
                   />
@@ -2027,11 +2043,13 @@ export default function ProfileCreationModal({ open, onClose, onCreateProfile, i
                   <Switch
                     checked={profileData.webrtc.fillBasedOnIp}
                     onChange={(e) => {
-                      const newWebRTC = {
-                        ...profileData.webrtc,
-                        fillBasedOnIp: e.target.checked
-                      };
-                      handleChange('webrtc', '', newWebRTC);
+                      setProfileData(prevData => ({
+                        ...prevData,
+                        webrtc: {
+                          ...prevData.webrtc,
+                          fillBasedOnIp: e.target.checked
+                        }
+                      }));
                     }}
                     color="primary"
                   />

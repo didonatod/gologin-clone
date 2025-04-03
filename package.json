@@ -6,7 +6,7 @@
   "scripts": {
     "start-react": "cross-env BROWSER=none react-app-rewired start",
     "start-electron": "electron .",
-    "dev": "concurrently \"npm run start-react\" \"wait-on http://localhost:3000 && npx nodemon --watch main.js --watch preload.js --exec electron .\"",
+    "dev": "concurrently \"npm run start-react\" \"wait-on http://localhost:3000 -t 60000 && cross-env NODE_ENV=development npx nodemon --watch main.js --watch preload.js --exec electron .\"",
     "restart": "npm run dev",
     "build": "react-app-rewired build",
     "postbuild": "mkdir -p build/icons/notifications && cp public/icons/notifications/*.png build/icons/notifications/",

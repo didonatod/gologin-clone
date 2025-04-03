@@ -28,7 +28,14 @@ import {
   Paper,
   RadioGroup,
   Radio,
-  Slider
+  Slider,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  ListItemAvatar,
+  ListItemSecondaryAction,
+  LinearProgress
 } from '@mui/material';
 import ComputerIcon from '@mui/icons-material/Computer';
 import PublicIcon from '@mui/icons-material/Public';
@@ -75,17 +82,14 @@ import DataObjectIcon from '@mui/icons-material/DataObject';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Avatar from '@mui/material/Avatar';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
-import ListItemAvatar from '@mui/material/ListItemAvatar';
-import ListItemSecondaryAction from '@mui/material/ListItemSecondaryAction';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import Link from '@mui/material/Link';
 import LinkIcon from '@mui/icons-material/Link';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import FolderIcon from '@mui/icons-material/Folder';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import InfoIcon from '@mui/icons-material/Info';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
 
 // Extension categories with icons
 const EXTENSION_CATEGORIES = [
@@ -420,6 +424,14 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  // Add state for extension upload
+  const [extensionFile, setExtensionFile] = useState(null);
+  const [uploadingExtension, setUploadingExtension] = useState(false);
+  const [extensionUploadError, setExtensionUploadError] = useState('');
+  const [extensionUploadSuccess, setExtensionUploadSuccess] = useState('');
+  const [customExtensions, setCustomExtensions] = useState([]);
+  const extensionFileInputRef = React.useRef(null);
+
   // Effect to populate form with initial data when editing
   useEffect(() => {
     if (profile) {
@@ -598,13 +610,21 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
 
   // Handle nested object changes (proxy, webrtc, etc.)
   const handleNestedChange = (section, field, value) => {
-    setProfileData({
-      ...profileData,
-      [section]: {
-        ...profileData[section],
-        [field]: value
-      }
-    });
+    // If field is empty string, we're replacing the entire section object
+    if (field === '') {
+      setProfileData({
+        ...profileData,
+        [section]: value
+      });
+    } else {
+      setProfileData({
+        ...profileData,
+        [section]: {
+          ...profileData[section],
+          [field]: value
+        }
+      });
+    }
   };
 
   // Handle form submission
@@ -868,6 +888,246 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
     }
   };
 
+  // Handle updating geolocation data based on coordinates
+  const handleUpdateCoordinates = (latitude, longitude) => {
+    // In a real app, this would make a reverse geocoding API call
+    // For now, we'll use dummy data based on the coordinates
+    
+    // Some basic logic to simulate geocoding
+    let country = 'United States';
+    let countryCode = 'US';
+    let state = 'New York';
+    let city = 'New York';
+    let zipCode = '10001';
+    let timeZone = 'America/New_York';
+    
+    // Very simplified logic to determine location
+    if (latitude > 49 && longitude < -100) {
+      // Northwest US/Canada
+      country = 'United States';
+      countryCode = 'US';
+      state = 'Washington';
+      city = 'Seattle';
+      zipCode = '98101';
+      timeZone = 'America/Los_Angeles';
+    } else if (latitude > 35 && longitude < -115) {
+      // Western US
+      country = 'United States';
+      countryCode = 'US';
+      state = 'California';
+      city = 'Los Angeles';
+      zipCode = '90001';
+      timeZone = 'America/Los_Angeles';
+    } else if (latitude < 33 && longitude > -90 && longitude < -75) {
+      // Southern US
+      country = 'United States';
+      countryCode = 'US';
+      state = 'Florida';
+      city = 'Miami';
+      zipCode = '33101';
+      timeZone = 'America/New_York';
+    } else if (latitude > 40 && longitude > -80) {
+      // Northeast US
+      country = 'United States';
+      countryCode = 'US';
+      state = 'New York';
+      city = 'New York';
+      zipCode = '10001';
+      timeZone = 'America/New_York';
+    } else if (latitude > 50 && longitude > -5 && longitude < 10) {
+      // UK/Western Europe
+      country = 'United Kingdom';
+      countryCode = 'GB';
+      state = 'England';
+      city = 'London';
+      zipCode = 'SW1A 1AA';
+      timeZone = 'Europe/London';
+    } else if (latitude > 45 && longitude > 0 && longitude < 20) {
+      // Central Europe
+      country = 'Germany';
+      countryCode = 'DE';
+      state = 'Berlin';
+      city = 'Berlin';
+      zipCode = '10115';
+      timeZone = 'Europe/Berlin';
+    }
+    
+    // Update the geolocation data
+    setProfileData(prev => ({
+      ...prev,
+      geolocation: {
+        ...prev.geolocation,
+        latitude: latitude.toString(),
+        longitude: longitude.toString(),
+        country,
+        countryCode,
+        state,
+        city,
+        zipCode,
+        timeZone
+      }
+    }));
+  };
+
+  // Handle extension file upload button click
+  const handleExtensionUploadClick = () => {
+    extensionFileInputRef.current.click();
+  };
+
+  // Handle extension file change
+  const handleExtensionFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setExtensionFile(file);
+    setUploadingExtension(true);
+    setExtensionUploadError('');
+    setExtensionUploadSuccess('');
+
+    try {
+      // Read the .crx file as an ArrayBuffer
+      const buffer = await readFileAsArrayBuffer(file);
+      
+      // Parse the CRX header
+      const crxInfo = await parseCrxFile(buffer, file.name);
+      
+      // Validate the CRX file
+      if (!crxInfo) {
+        throw new Error('Invalid CRX extension file format');
+      }
+
+      // Generate a unique ID for the extension
+      const extensionId = `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create extension object
+      const newExtension = {
+        id: extensionId,
+        name: crxInfo.name || file.name.replace('.crx', ''),
+        version: crxInfo.version || '1.0.0',
+        description: crxInfo.description || 'Custom uploaded extension',
+        icon: 'extension',
+        imageUrl: crxInfo.iconDataUrl || '',
+        category: 'custom',
+        enabled: false,
+        custom: true,
+        uploadDate: new Date().toISOString(),
+        size: file.size,
+        filePath: `extensions/${extensionId}.crx` // Theoretical path where it would be stored
+      };
+      
+      // Add to custom extensions
+      setCustomExtensions(prev => [...prev, newExtension]);
+      
+      // Show success message
+      setExtensionUploadSuccess(`Extension "${newExtension.name}" has been successfully uploaded`);
+      
+    } catch (error) {
+      console.error('Error parsing extension file:', error);
+      setExtensionUploadError(`Failed to upload extension: ${error.message}`);
+    } finally {
+      setUploadingExtension(false);
+      setExtensionFile(null);
+      event.target.value = null;
+    }
+  };
+
+  // Helper function to read file as ArrayBuffer
+  const readFileAsArrayBuffer = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  // Helper function to parse CRX file and extract metadata
+  const parseCrxFile = async (buffer, fileName) => {
+    try {
+      // Check minimum CRX size
+      if (buffer.byteLength < 16) {
+        throw new Error('File too small to be a valid CRX');
+      }
+      
+      // Simple validation of CRX format (checking magic number "Cr24")
+      const header = new Uint8Array(buffer.slice(0, 4));
+      const magic = String.fromCharCode.apply(null, header);
+      
+      if (magic !== 'Cr24') {
+        // Try parsing as ZIP (unpacked extension)
+        return parseZipAsExtension(buffer, fileName);
+      }
+      
+      // For demo purposes, we'll return mock data based on the filename
+      // In a real implementation, you would extract the manifest.json from the CRX
+      return {
+        name: fileName.replace('.crx', '').replace(/-/g, ' ').replace(/_/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' '),
+        version: '1.0.0',
+        description: `Custom extension for browser automation and fingerprint spoofing`,
+        // Generate a data URL for the icon (in reality, you'd extract this from the CRX)
+        iconDataUrl: generatePlaceholderIcon(fileName),
+      };
+    } catch (error) {
+      console.error('Error parsing CRX:', error);
+      throw new Error('Invalid extension format');
+    }
+  };
+
+  // Helper function to parse ZIP as unpacked extension
+  const parseZipAsExtension = async (buffer, fileName) => {
+    // In a real implementation, you would use a library like JSZip to parse the ZIP
+    // For demo purposes, we'll return mock data
+    return {
+      name: fileName.replace('.zip', '').replace(/-/g, ' ').replace(/_/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' '),
+      version: '1.0.0',
+      description: `Unpacked extension for browser automation and anti-detection`,
+      iconDataUrl: generatePlaceholderIcon(fileName),
+    };
+  };
+
+  // Generate a placeholder icon for the extension based on its name
+  const generatePlaceholderIcon = (name) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    
+    // Generate a deterministic color based on the name
+    const hash = name.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0)) | 0, 0);
+    const hue = Math.abs(hash) % 360;
+    
+    // Fill background
+    ctx.fillStyle = `hsl(${hue}, 60%, 60%)`;
+    ctx.fillRect(0, 0, 128, 128);
+    
+    // Add text
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name.charAt(0).toUpperCase(), 64, 64);
+    
+    return canvas.toDataURL('image/png');
+  };
+
+  // Function to remove a custom extension
+  const handleRemoveCustomExtension = (extensionId) => {
+    // Remove from custom extensions
+    setCustomExtensions(prev => prev.filter(ext => ext.id !== extensionId));
+    
+    // Remove from profile if it was added
+    setProfileData(prev => ({
+      ...prev,
+      extensions: prev.extensions.filter(ext => ext.id !== extensionId)
+    }));
+  };
+
   // Render Overview tab
   const renderOverviewTab = () => {
   return (
@@ -982,9 +1242,9 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                 <FormControl fullWidth size="small">
                 <InputLabel>Proxy Type</InputLabel>
                 <Select
-                    value={profileData.proxy.type}
-                    onChange={(e) => handleChange('proxy', 'type', e.target.value)}
-                  label="Proxy Type"
+                  value={profileData.proxy.type}
+                  onChange={(e) => handleChange('proxy', 'type', e.target.value)}
+              label="Proxy Type"
                 >
                   <MenuItem value="http">HTTP</MenuItem>
                     <MenuItem value="https">HTTPS</MenuItem>
@@ -1006,16 +1266,16 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
               />
             </Grid>
               
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Port"
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Port"
                   value={profileData.proxy.port}
                   onChange={(e) => handleChange('proxy', 'port', e.target.value)}
                   size="small"
                   placeholder="e.g., 8080"
-              />
-            </Grid>
+                />
+              </Grid>
               
               <Grid item xs={12} md={6}>
                 <FormControlLabel
@@ -1999,18 +2259,18 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                 <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                    label="Latitude"
-                    value={profileData.geolocation?.latitude || ''}
-                    onChange={(e) => handleChange('geolocation', 'latitude', e.target.value)}
-                    placeholder="40.7128"
-                    helperText="Enter a value between -90 and 90"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <ExploreIcon fontSize="small" />
-                        </InputAdornment>
-                      ),
-                    }}
+                label="Latitude"
+                value={profileData.geolocation?.latitude || ''}
+                onChange={(e) => handleChange('geolocation', 'latitude', e.target.value)}
+                placeholder="40.7128"
+                helperText="Enter a value between -90 and 90"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <ExploreIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
               />
             </Grid>
                 
@@ -2239,6 +2499,60 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
           Extensions are profile-specific and won't be shared between profiles. Be cautious when installing extensions as they can access page content and may pose privacy risks.
         </Alert>
 
+        {/* Extension Upload Section */}
+        <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <CloudUploadIcon sx={{ mr: 1, color: 'primary.main' }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Upload Custom Extension</Typography>
+          </Box>
+          
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={7}>
+              <Typography variant="body2" color="text.secondary">
+                Upload a Chrome extension (.crx file) to add it to your profile. Extensions provide additional functionality like anti-detection measures and automation tools for ticket purchasing.
+              </Typography>
+            </Grid>
+            <Grid item xs={12} md={5} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
+              <input
+                type="file"
+                accept=".crx,.zip"
+                ref={extensionFileInputRef}
+                onChange={handleExtensionFileChange}
+                style={{ display: 'none' }}
+              />
+              <Button
+                variant="contained"
+                startIcon={<FileUploadIcon />}
+                onClick={handleExtensionUploadClick}
+                disabled={uploadingExtension}
+              >
+                {uploadingExtension ? 'Uploading...' : 'Upload Extension (.crx)'}
+              </Button>
+            </Grid>
+            {uploadingExtension && (
+              <Grid item xs={12}>
+                <Box sx={{ width: '100%', mt: 1 }}>
+                  <LinearProgress />
+                </Box>
+              </Grid>
+            )}
+            {extensionUploadError && (
+              <Grid item xs={12}>
+                <Alert severity="error" onClose={() => setExtensionUploadError('')}>
+                  {extensionUploadError}
+                </Alert>
+              </Grid>
+            )}
+            {extensionUploadSuccess && (
+              <Grid item xs={12}>
+                <Alert severity="success" onClose={() => setExtensionUploadSuccess('')}>
+                  {extensionUploadSuccess}
+                </Alert>
+              </Grid>
+            )}
+          </Grid>
+        </Paper>
+
         {/* Search Box */}
         <TextField
           fullWidth
@@ -2257,11 +2571,11 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
         />
 
         {/* Category Buttons */}
-        <Box sx={{ mb: 3 }}>
+        <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Button
             variant={extensionCategory === 'all' ? 'contained' : 'outlined'}
             onClick={() => setExtensionCategory('all')}
-            sx={{ mr: 1, mb: 1 }}
+            size="small"
           >
             All
           </Button>
@@ -2269,39 +2583,15 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
             variant={extensionCategory === 'privacy' ? 'contained' : 'outlined'}
             startIcon={<SecurityIcon />}
             onClick={() => setExtensionCategory('privacy')}
-            sx={{ mr: 1, mb: 1 }}
+            size="small"
           >
             Privacy & Security
-          </Button>
-          <Button
-            variant={extensionCategory === 'shopping' ? 'contained' : 'outlined'}
-            startIcon={<ShoppingCartIcon />}
-            onClick={() => setExtensionCategory('shopping')}
-            sx={{ mr: 1, mb: 1 }}
-          >
-            Shopping
-          </Button>
-          <Button
-            variant={extensionCategory === 'productivity' ? 'contained' : 'outlined'}
-            startIcon={<LanguageIcon />}
-            onClick={() => setExtensionCategory('productivity')}
-            sx={{ mr: 1, mb: 1 }}
-          >
-            Productivity
-          </Button>
-          <Button
-            variant={extensionCategory === 'crypto' ? 'contained' : 'outlined'}
-            startIcon={<MonetizationOnIcon />}
-            onClick={() => setExtensionCategory('crypto')}
-            sx={{ mr: 1, mb: 1 }}
-          >
-            Crypto & Finance
           </Button>
           <Button
             variant={extensionCategory === 'ticketmaster' ? 'contained' : 'outlined'}
             startIcon={<EventIcon />}
             onClick={() => setExtensionCategory('ticketmaster')}
-            sx={{ mr: 1, mb: 1 }}
+            size="small"
           >
             Ticketmaster
           </Button>
@@ -2309,7 +2599,7 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
             variant={extensionCategory === 'stubhub' ? 'contained' : 'outlined'}
             startIcon={<ConfirmationNumberIcon />}
             onClick={() => setExtensionCategory('stubhub')}
-            sx={{ mr: 1, mb: 1 }}
+            size="small"
           >
             StubHub
           </Button>
@@ -2317,25 +2607,26 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
             variant={extensionCategory === 'anti-detection' ? 'contained' : 'outlined'}
             startIcon={<FingerprintIcon />}
             onClick={() => setExtensionCategory('anti-detection')}
-            sx={{ mr: 1, mb: 1 }}
+            size="small"
           >
             Anti-Detection
           </Button>
           <Button
-            variant={extensionCategory === 'developer' ? 'contained' : 'outlined'}
-            startIcon={<CodeIcon />}
-            onClick={() => setExtensionCategory('developer')}
-            sx={{ mr: 1, mb: 1 }}
+            variant={extensionCategory === 'productivity' ? 'contained' : 'outlined'}
+            startIcon={<LanguageIcon />}
+            onClick={() => setExtensionCategory('productivity')}
+            size="small"
           >
-            Developer Tools
+            Productivity
           </Button>
           <Button
-            variant={extensionCategory === 'automation' ? 'contained' : 'outlined'}
-            startIcon={<AutoFixHighIcon />}
-            onClick={() => setExtensionCategory('automation')}
-            sx={{ mr: 1, mb: 1 }}
+            variant={extensionCategory === 'custom' ? 'contained' : 'outlined'}
+            startIcon={<ExtensionIcon />}
+            onClick={() => setExtensionCategory('custom')}
+            size="small"
+            color="secondary"
           >
-            Automation
+            Custom Uploaded
           </Button>
         </Box>
 
@@ -2343,11 +2634,31 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
         <Grid container spacing={2}>
           {getFilteredExtensions().map((extension) => {
             const isInstalled = profileData.extensions.some(ext => ext.id === extension.id);
+            const isCustom = extension.custom === true;
+            
             return (
               <Grid item xs={12} sm={6} md={4} key={extension.id}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
+                <Paper variant="outlined" sx={{ 
+                  p: 2,
+                  border: isCustom ? '1px solid rgba(103, 58, 183, 0.5)' : undefined,
+                  position: 'relative'
+                }}>
+                  {isCustom && (
+                    <Chip 
+                      label="Custom" 
+                      size="small" 
+                      color="secondary" 
+                      sx={{ 
+                        position: 'absolute', 
+                        top: 8, 
+                        right: 8,
+                        fontSize: '0.7rem'
+                      }} 
+                    />
+                  )}
+                  
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Avatar src={extension.imageUrl} variant="rounded" sx={{ mr: 2 }}>
+                    <Avatar src={extension.imageUrl} variant="rounded" sx={{ mr: 2, bgcolor: isCustom ? 'secondary.light' : undefined }}>
                       {getExtensionIcon(extension.icon)}
                     </Avatar>
                     <Box>
@@ -2357,42 +2668,163 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
                       </Typography>
                     </Box>
                   </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: '40px' }}>
                     {extension.description}
                   </Typography>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    onClick={() => {
-                      if (!isInstalled) {
-                        setProfileData(prev => ({
-                          ...prev,
-                          extensions: [...prev.extensions, {
-                            ...extension,
-                            enabled: true,
-                            addedAt: new Date().toISOString()
-                          }]
-                        }));
-                      }
-                    }}
-                    disabled={isInstalled}
-                  >
-                    {isInstalled ? 'Extension Added' : 'Add Extension'}
-                  </Button>
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      color={isCustom ? "secondary" : "primary"}
+                      onClick={() => {
+                        if (!isInstalled) {
+                          setProfileData(prev => ({
+                            ...prev,
+                            extensions: [...prev.extensions, {
+                              ...extension,
+                              enabled: true,
+                              addedAt: new Date().toISOString()
+                            }]
+                          }));
+                        }
+                      }}
+                      disabled={isInstalled}
+                      sx={{ mr: isCustom ? 1 : 0 }}
+                    >
+                      {isInstalled ? 'Added' : 'Add Extension'}
+                    </Button>
+                    
+                    {isCustom && (
+                      <IconButton 
+                        color="error" 
+                        size="small"
+                        onClick={() => handleRemoveCustomExtension(extension.id)}
+                        title="Remove custom extension"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    )}
+                  </Box>
                 </Paper>
               </Grid>
             );
           })}
         </Grid>
-
+        
         {getFilteredExtensions().length === 0 && (
-          <Alert severity="info">
-            No extensions available in this category.
-          </Alert>
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="subtitle1" color="text.secondary">
+              No extensions found matching your criteria
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Try changing your search or category filter
+            </Typography>
+          </Box>
+        )}
+        
+        {/* Installed Extensions Section */}
+        {profileData.extensions.length > 0 && (
+          <Box sx={{ mt: 4 }}>
+            <Divider sx={{ mb: 2 }}>
+              <Chip label="Installed Extensions" />
+            </Divider>
+            
+            <List sx={{ bgcolor: 'background.paper' }}>
+              {profileData.extensions.map((extension) => (
+                <Paper key={extension.id} variant="outlined" sx={{ mb: 1 }}>
+                  <ListItem
+                    secondaryAction={
+                      <IconButton 
+                        edge="end" 
+                        onClick={() => {
+                          setProfileData(prev => ({
+                            ...prev,
+                            extensions: prev.extensions.filter(ext => ext.id !== extension.id)
+                          }));
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    }
+                  >
+                    <ListItemAvatar>
+                      <Avatar src={extension.imageUrl} variant="rounded" sx={{ bgcolor: extension.custom ? 'secondary.light' : undefined }}>
+                        {getExtensionIcon(extension.icon)}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          {extension.name}
+                          {extension.custom && (
+                            <Chip 
+                              label="Custom" 
+                              size="small" 
+                              color="secondary"
+                              sx={{ ml: 1, height: 20, fontSize: '0.6rem' }}
+                            />
+                          )}
+                        </Box>
+                      }
+                      secondary={
+                        <Box>
+                          <Typography variant="caption" component="span" color="text.secondary">
+                            v{extension.version}
+                          </Typography>
+                          {extension.addedAt && (
+                            <Typography variant="caption" component="span" color="text.secondary" sx={{ ml: 1 }}>
+                              Added: {new Date(extension.addedAt).toLocaleDateString()}
+                            </Typography>
+                          )}
+                        </Box>
+                      }
+                    />
+                    <Switch
+                      edge="end"
+                      checked={extension.enabled}
+                      onChange={(e) => {
+                        setProfileData(prev => ({
+                          ...prev,
+                          extensions: prev.extensions.map(ext => 
+                            ext.id === extension.id 
+                              ? { ...ext, enabled: e.target.checked }
+                              : ext
+                          )
+                        }));
+                      }}
+                    />
+                  </ListItem>
+                </Paper>
+              ))}
+            </List>
+          </Box>
         )}
       </Box>
     );
+  };
+
+  // Add this function before renderExtensionsTab
+  const getFilteredExtensions = () => {
+    let filtered = [...PREBUILT_EXTENSIONS, ...customExtensions];
+    
+    // Filter by category
+    if (extensionCategory !== 'all') {
+      filtered = filtered.filter(ext => ext.category === extensionCategory || 
+        (extensionCategory === 'custom' && ext.custom === true));
+    }
+    
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(ext => 
+        ext.name.toLowerCase().includes(query) || 
+        ext.description?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
   };
 
   // Render Bookmarks tab
@@ -2666,17 +3098,11 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
 
         {/* Quick Actions */}
         <Paper elevation={0} variant="outlined" sx={{ p: 2, mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <CloudUploadIcon sx={{ mr: 1, color: 'primary.main' }} />
             <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Quick Actions</Typography>
-            <Button
-              variant="contained"
-              startIcon={<RefreshIcon />}
-              onClick={generateRandomFingerprint}
-            >
-              Generate Random Fingerprint
-            </Button>
           </Box>
-
+          
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
@@ -3411,27 +3837,6 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
     );
   };
 
-  // Add this function before renderExtensionsTab
-  const getFilteredExtensions = () => {
-    let filtered = PREBUILT_EXTENSIONS;
-    
-    // Filter by category
-    if (extensionCategory !== 'all') {
-      filtered = filtered.filter(ext => ext.category === extensionCategory);
-    }
-    
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(ext => 
-        ext.name.toLowerCase().includes(query) || 
-        ext.description.toLowerCase().includes(query)
-      );
-    }
-    
-    return filtered;
-  };
-
   // Add bookmark handlers at component level
   const handleAddBookmark = () => {
     if (!newBookmark.name.trim() || !newBookmark.url.trim()) {
@@ -3510,6 +3915,25 @@ const ProfileEditModal = ({ open, onClose, onSave, profile }) => {
       setShowNewFolderInput(false);
     }
   };
+
+  // Effect to load custom extensions from localStorage
+  useEffect(() => {
+    try {
+      const storedExtensions = localStorage.getItem('custom_extensions');
+      if (storedExtensions) {
+        setCustomExtensions(JSON.parse(storedExtensions));
+      }
+    } catch (error) {
+      console.error('Error loading custom extensions:', error);
+    }
+  }, []);
+
+  // Save custom extensions to localStorage when they change
+  useEffect(() => {
+    if (customExtensions.length > 0) {
+      localStorage.setItem('custom_extensions', JSON.stringify(customExtensions));
+    }
+  }, [customExtensions]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>

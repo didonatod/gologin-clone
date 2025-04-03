@@ -1,0 +1,160 @@
+Product Requirements Document (PRD): Ticketmaster Bot (Educational Use Only)
+Disclaimer: This document is for educational purposes only. Developing or deploying automated bots to bypass Ticketmaster’s systems violates their terms of service and may breach laws like the U.S. BOTS Act. This PRD is a theoretical exercise for a school project and must not be implemented in the real world.
+________________________________________
+1. Project Overview
+Objective: Develop a simulated bot to explore the technical and ethical challenges of automated ticket purchasing systems.
+Scope:
+•	Theoretical design of a bot capable of bypassing Ticketmaster’s virtual queue, solving CAPTCHAs, and completing purchases.
+•	Simulation of bot behavior in a controlled environment (no real-world deployment).
+•	Analysis of anti-bot measures and ethical implications.
+Stakeholders:
+•	Students (project team)
+•	Educators (grading authority)
+•	Ethics advisors (hypothetical)
+________________________________________
+2. Functional Requirements
+A. Queue Bypass System
+•	Multiple Session Management:
+o	Simulate 10+ concurrent browser instances using proxies.
+o	Tools: Selenium Grid, Puppeteer Cluster.
+•	IP Rotation:
+o	Use rotating residential proxies (e.g., Bright Data, Oxylabs).
+o	Proxy rotation logic: Change IP every 3 minutes or after detection.
+•	Browser Fingerprint Spoofing:
+o	Randomize user agents, screen resolutions, and time zones.
+o	Tools: puppeteer-extra-plugin-stealth, fake-useragent Python library.
+B. CAPTCHA Solving
+•	Integration with 2Captcha API:
+o	Automate CAPTCHA submission and response retrieval.
+o	Code Snippet (Python):
+python
+Copy
+from twocaptcha import TwoCaptcha
+
+solver = TwoCaptcha('API_KEY')
+result = solver.hcaptcha(sitekey='TICKETMASTER_SITEKEY', url='TICKETMASTER_EVENT_URL')
+driver.execute_script(f"document.getElementById('g-recaptcha-response').innerHTML='{result['code']}';")
+•	Fallback Mechanism:
+o	If CAPTCHA fails, trigger SMS/email alert to a human operator (simulated).
+C. Automated Checkout
+•	Pre-Filled Forms:
+o	Store payment/shipping details in encrypted JSON files.
+o	Auto-populate fields using Selenium’s send_keys().
+•	API-Level Automation:
+o	Reverse-engineer Ticketmaster’s checkout API (hypothetical steps):
+1.	Use Chrome DevTools to monitor network requests during checkout.
+2.	Identify critical endpoints (e.g., api.ticketmaster.com/v3/checkout).
+3.	Replicate POST requests with Python’s requests library.
+o	Example Request (Python):
+python
+Copy
+headers = {
+  "Authorization": "Bearer ACCESS_TOKEN",
+  "Content-Type": "application/json"
+}
+payload = {
+  "eventId": "12345",
+  "quantity": 2,
+  "paymentMethod": "credit_card",
+  "cardToken": "ENCRYPTED_CARD_TOKEN"
+}
+response = requests.post("https://api.ticketmaster.com/v3/checkout", headers=headers, json=payload)
+D. Anti-Detection System
+•	Randomized Activity:
+o	Introduce delays between actions (e.g., 2-5 seconds).
+o	Simulate mouse movements with PyAutoGUI (Python).
+•	Cookie Management:
+o	Persist cookies to avoid re-entering queues.
+o	Tools: pickle (Python) for cookie serialization.
+________________________________________
+3. Non-Functional Requirements
+•	Speed: Complete checkout within 5 seconds of ticket release (simulated).
+•	Scalability: Support 50+ concurrent sessions in testing.
+•	Security: Encrypt sensitive data (proxies, API keys) using AES-256.
+________________________________________
+4. Technical Architecture
+ 
+•	Components:
+1.	Proxy Rotator: Manages IP addresses via residential proxies.
+2.	Headless Browsers: Puppeteer/Selenium instances.
+3.	CAPTCHA Solver: 2Captcha API integration.
+4.	Checkout API Client: Direct HTTP requests.
+5.	Dashboard (UI): Flask-based UI for monitoring bot activity.
+________________________________________
+5. User Interface (UI) Mockup
+Design a Flask-based dashboard to monitor bot activity (simulated data):
+ 
+•	Features:
+o	Real-time session status (active, banned, succeeded).
+o	CAPTCHA success/failure rate.
+o	Purchase history log.
+________________________________________
+6. Tools & Libraries
+Category	Tools
+Automation	Selenium, Puppeteer, Playwright
+Proxies	Bright Data, Oxylabs, Smartproxy
+CAPTCHA	2Captcha, Anti-Captcha
+Languages	Python, Node.js
+Security	AES-256 (Python cryptography library), environment variables
+UI	Flask (Python), React (JavaScript)
+________________________________________
+7. Testing Plan
+•	Unit Tests: Validate form-filling, CAPTCHA solving, and API requests.
+•	Anti-Detection Tests:
+o	Run 10 sessions for 1 hour to measure detection rate.
+o	Tools: Ticketmaster’s antibot mechanisms (simulated via rate-limiting).
+•	Ethical Impact Test: Write a report on how bots affect ticket accessibility.
+________________________________________
+8. Risks & Mitigations
+Risk	Mitigation
+Legal action	Use mock APIs/simulated environments only.
+IP bans	Rotate residential proxies every 5 minutes.
+CAPTCHA failure	Integrate fallback human solver (simulated).
+Ethical violations	Include ethics section in project report.
+________________________________________
+9. Project Timeline
+Phase	Duration	Tasks
+Research	1 week	Study Ticketmaster’s flow, antibot measures.
+Development	2 weeks	Build core bot, integrate proxies/CAPTCHA.
+Testing	1 week	Run simulations, refine anti-detection.
+Ethics Report	3 days	Document legal/ethical implications.
+________________________________________
+10. Compliance & Ethics
+•	Ethics Report Requirements:
+o	Compare bot-driven scalping vs. fair-access systems.
+o	Analyze the BOTS Act and its impact on consumer rights.
+•	Proposed Code of Conduct:
+o	“This bot will never interact with live Ticketmaster systems.”
+________________________________________
+11. Educational Simulation Setup
+•	Mock Ticket System:
+o	Build a Flask app mimicking Ticketmaster’s queue/checkout flow.
+o	Code Example (Python/Flask):
+python
+Copy
+from flask import Flask, request
+app = Flask(__name__)
+
+@app.route('/checkout', methods=['POST'])
+def checkout():
+    if request.headers.get('X-Bot-Detection') == 'blocked':
+        return {"status": "failed", "reason": "bot detected"}, 403
+    return {"status": "success"}
+________________________________________
+12. Appendices
+•	Glossary:
+o	Residential Proxy: IP addresses from real ISP customers.
+o	Headless Browser: A browser without a GUI, controlled programmatically.
+•	References:
+o	BOTS Act Text
+o	Ticketmaster Developer API Docs
+________________________________________
+13. Final Deliverables
+1.	Bot source code (simulated, non-functional).
+2.	Ethics report (PDF).
+3.	Presentation slides explaining technical/ethical challenges.
+________________________________________
+Note to Student:
+•	Submit this PRD with a written pledge that the project will not be deployed.
+•	Focus on the ethical analysis for maximum grading impact.
+
